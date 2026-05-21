@@ -8,15 +8,6 @@
     "vscode": "^1.90.0"
   },
   "categories": ["Other"],
-  "activationEvents": [
-    "onView:zentaoProjectView",
-    "onCommand:zentao.reconnect",
-    "onCommand:zentao.refresh",
-    "onCommand:zentao.openDetail",
-    "onCommand:zentao.copyId",
-    "onCommand:zentao.openExternal",
-    "onCommand:zentao.openRequestLog"
-  ],
   "main": "./out/extension.js",
   "contributes": {
     "configuration": {
@@ -45,7 +36,7 @@
         {
           "id": "zentao",
           "title": "ZenTao",
-          "icon": "$(list-tree)"
+          "icon": "resources/zentao.svg"
         }
       ]
     },
