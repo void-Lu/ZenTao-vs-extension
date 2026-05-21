@@ -10,6 +10,7 @@ export interface WorkspaceConfigurationLike {
 }
 
 export interface SecretStorageLike {
+  // Uses Thenable to match VS Code SecretStorage API surface (which returns Thenable)
   get(key: string): Thenable<string | undefined>;
   store(key: string, value: string): Thenable<void>;
   delete(key: string): Thenable<void>;
@@ -26,6 +27,11 @@ export function normalizeBaseUrl(raw: string): string {
     url = new URL(value);
   } catch {
     throw new Error('ZenTao URL must be a valid URL.');
+  }
+
+  // Disallow embedded credentials in the URL for security reasons
+  if (url.username || url.password) {
+    throw new Error('ZenTao URL must not include credentials.');
   }
 
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
@@ -52,7 +58,9 @@ export class CredentialsStore {
 
   // Simple in-process serialization queue for write operations to avoid
   // interleaving when multiple callers in the same extension host perform
-  // writes concurrently. This is intentionally not a cross-process lock.
+  // writes concurrently. This is intentionally not a cross-process lock and
+  // matches the in-process serialization behavior of the VS Code extension-host
+  // — do not attempt cross-process locking here.
   private writeQueue: Promise<void> = Promise.resolve();
 
   private runExclusive<T>(fn: () => Promise<T>): Promise<T> {
@@ -91,18 +99,36 @@ export class CredentialsStore {
         await this.secrets.store(KEY_PASSWORD, password);
         await this.secrets.store(KEY_TOKEN, token);
       } catch (err) {
-        // best-effort cleanup; swallow deletion errors but preserve original error
+        // Attempt cleanup by deleting any keys that may have been written.
+        // If cleanup succeeds, rethrow the original error. If cleanup
+        // encounters failures, surface them together with the original
+        // error as an AggregateError so callers can observe both the write
+        // failure and the rollback failures.
+        const rollbackErrors: any[] = [];
         try {
-          // attempt to remove any keys that might have been written
           await this.secrets.delete(KEY_ACCOUNT);
-        } catch {}
+        } catch (e) {
+          rollbackErrors.push(e);
+        }
         try {
           await this.secrets.delete(KEY_PASSWORD);
-        } catch {}
+        } catch (e) {
+          rollbackErrors.push(e);
+        }
         try {
           await this.secrets.delete(KEY_TOKEN);
-        } catch {}
-        throw err;
+        } catch (e) {
+          rollbackErrors.push(e);
+        }
+
+        if (rollbackErrors.length === 0) {
+          // Rollback succeeded — preserve original error
+          throw err;
+        }
+
+        // Rollback had failures: include original error plus rollback errors
+        const allErrors = [err, ...rollbackErrors];
+        throw new AggregateError(allErrors, 'Failed to store credentials and rollback cleanup failed.');
       }
     });
   }

@@ -3,7 +3,7 @@ import { normalizeBaseUrl, readExtensionConfig, CredentialsStore, KEY_ACCOUNT, K
 
 class InMemorySecrets {
   private storage = new Map<string, string>();
-  constructor(private failOnStoreKey?: string) {}
+  constructor(private failOnStoreKey?: string, private failOnDeleteKey?: string) {}
   get(key: string): Thenable<string | undefined> {
     return Promise.resolve(this.storage.get(key));
   }
@@ -15,6 +15,9 @@ class InMemorySecrets {
     return Promise.resolve();
   }
   delete(key: string): Thenable<void> {
+    if (this.failOnDeleteKey && key === this.failOnDeleteKey) {
+      return Promise.reject(new Error('simulated delete failure'));
+    }
     this.storage.delete(key);
     return Promise.resolve();
   }
@@ -23,6 +26,10 @@ class InMemorySecrets {
 describe('normalizeBaseUrl', () => {
   it('keeps https URLs and appends a trailing slash', () => {
     expect(normalizeBaseUrl('https://zentao.example.com')).toBe('https://zentao.example.com/');
+  });
+
+  it('rejects URLs containing embedded credentials', () => {
+    expect(() => normalizeBaseUrl('https://user:pass@zentao.example.com')).toThrow('ZenTao URL must not include credentials.');
   });
 
   it('rejects non-http URLs', () => {
@@ -67,6 +74,48 @@ describe('readExtensionConfig', () => {
       ).toThrow('ZenTao project ID must be a positive integer.');
     }
   });
+
+  it('throws when baseUrl is missing or blank', () => {
+    expect(() =>
+      readExtensionConfig({
+        get<T>(key: string): T | undefined {
+          const values: Record<string, unknown> = {
+            baseUrl: '   ',
+            projectId: 1,
+            requestTimeout: 5000
+          };
+          return values[key] as T | undefined;
+        }
+      })
+    ).toThrow('ZenTao URL is required.');
+
+    expect(() =>
+      readExtensionConfig({
+        get<T>(key: string): T | undefined {
+          const values: Record<string, unknown> = {
+            projectId: 1,
+            requestTimeout: 5000
+          };
+          return values[key] as T | undefined;
+        }
+      })
+    ).toThrow('ZenTao URL is required.');
+  });
+
+  it('throws for malformed baseUrl', () => {
+    expect(() =>
+      readExtensionConfig({
+        get<T>(key: string): T | undefined {
+          const values: Record<string, unknown> = {
+            baseUrl: 'not-a-url',
+            projectId: 1,
+            requestTimeout: 5000
+          };
+          return values[key] as T | undefined;
+        }
+      })
+    ).toThrow('ZenTao URL must be a valid URL.');
+  });
 });
 
 describe('CredentialsStore', () => {
@@ -93,6 +142,26 @@ describe('CredentialsStore', () => {
     expect(creds.account).toBeUndefined();
     expect(creds.password).toBeUndefined();
     expect(creds.token).toBeUndefined();
+  });
+
+  it('surfaces rollback delete failures as AggregateError', async () => {
+    // fail on password write (middle operation) and fail to delete account during rollback
+    const mem = new InMemorySecrets(KEY_PASSWORD, KEY_ACCOUNT);
+    const store = new CredentialsStore(mem as any);
+
+    await expect(store.storeLogin('dave', 'pw', 'tok-3')).rejects.toBeInstanceOf(AggregateError);
+
+    try {
+      await store.storeLogin('dave', 'pw', 'tok-3');
+    } catch (err: any) {
+      expect(err).toBeInstanceOf(AggregateError);
+      expect(err.message).toBe('Failed to store credentials and rollback cleanup failed.');
+      // first error should be the original store failure
+      expect(err.errors[0].message).toBe('simulated store failure');
+      // subsequent errors should include the simulated delete failure
+      const hasDeleteFailure = err.errors.some((e: any) => e.message === 'simulated delete failure');
+      expect(hasDeleteFailure).toBe(true);
+    }
   });
 
   it('validates inputs for storeLogin and storeToken', async () => {
