@@ -1,5 +1,6 @@
 .superpowers/**
 docs/superpowers/**
 src/**/*.test.ts
+out/**/*.test.js
 node_modules/**/.cache/**
 out/**/*.map
