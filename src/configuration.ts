@@ -1,5 +1,10 @@
 import { ExtensionConfig, ZenTaoCredentials } from './types';
 
+// Public keys used for secret storage. Keep these stable as part of the public behavior.
+export const KEY_ACCOUNT = 'zentao.account';
+export const KEY_PASSWORD = 'zentao.password';
+export const KEY_TOKEN = 'zentao.token';
+
 export interface WorkspaceConfigurationLike {
   get<T>(key: string): T | undefined;
 }
@@ -47,26 +52,41 @@ export class CredentialsStore {
 
   async getCredentials(): Promise<ZenTaoCredentials> {
     const [account, password, token] = await Promise.all([
-      this.secrets.get('zentao.account'),
-      this.secrets.get('zentao.password'),
-      this.secrets.get('zentao.token')
+      this.secrets.get(KEY_ACCOUNT),
+      this.secrets.get(KEY_PASSWORD),
+      this.secrets.get(KEY_TOKEN)
     ]);
     return { account, password, token };
   }
 
   async storeLogin(account: string, password: string, token: string): Promise<void> {
-    await Promise.all([
-      this.secrets.store('zentao.account', account),
-      this.secrets.store('zentao.password', password),
-      this.secrets.store('zentao.token', token)
-    ]);
+    // Store sequentially to avoid partial writes from concurrent failures.
+    // If any write fails, rollback by deleting all credential keys.
+    try {
+      await this.secrets.store(KEY_ACCOUNT, account);
+      await this.secrets.store(KEY_PASSWORD, password);
+      await this.secrets.store(KEY_TOKEN, token);
+    } catch (err) {
+      // best-effort cleanup; swallow deletion errors but preserve original error
+      try {
+        // attempt to remove any keys that might have been written
+        await this.secrets.delete(KEY_ACCOUNT);
+      } catch {}
+      try {
+        await this.secrets.delete(KEY_PASSWORD);
+      } catch {}
+      try {
+        await this.secrets.delete(KEY_TOKEN);
+      } catch {}
+      throw err;
+    }
   }
 
   async storeToken(token: string): Promise<void> {
-    await this.secrets.store('zentao.token', token);
+    await this.secrets.store(KEY_TOKEN, token);
   }
 
   async clearToken(): Promise<void> {
-    await this.secrets.delete('zentao.token');
+    await this.secrets.delete(KEY_TOKEN);
   }
 }
