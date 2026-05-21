@@ -94,4 +94,56 @@ describe('CredentialsStore', () => {
     expect(creds.password).toBeUndefined();
     expect(creds.token).toBeUndefined();
   });
+
+  it('validates inputs for storeLogin and storeToken', async () => {
+    const mem = new InMemorySecrets();
+    const store = new CredentialsStore(mem as any);
+
+    await expect(store.storeLogin('   ', 'pw', 'tok')).rejects.toThrow('account is required');
+    await expect(store.storeLogin('alice', '', 'tok')).rejects.toThrow('password is required');
+    await expect(store.storeLogin('alice', 'pw', '   ')).rejects.toThrow('token is required');
+
+    await expect(store.storeToken('   ')).rejects.toThrow('token is required');
+  });
+
+  it('serializes concurrent write operations in-process', async () => {
+    // Recording secrets that delay operations to make interleaving visible
+    class RecordingSecrets {
+      storage = new Map<string, string>();
+      ops: string[] = [];
+      delay(ms: number) {
+        return new Promise((res) => setTimeout(res, ms));
+      }
+      async get(key: string): Promise<string | undefined> {
+        return this.storage.get(key);
+      }
+      async store(key: string, value: string): Promise<void> {
+        this.ops.push(`store:${key}:${value}`);
+        // delay to allow potential interleaving if not serialized
+        await this.delay(20);
+        this.storage.set(key, value);
+      }
+      async delete(key: string): Promise<void> {
+        this.ops.push(`delete:${key}`);
+        await this.delay(5);
+        this.storage.delete(key);
+      }
+    }
+
+    const mem = new RecordingSecrets();
+    const store = new CredentialsStore(mem as any);
+
+    // start storeLogin then immediately start storeToken concurrently
+    const p1 = store.storeLogin('carol', 'pw', 'tok-A');
+    const p2 = store.storeToken('tok-B');
+
+    await Promise.all([p1, p2]);
+
+    // Expect that the three stores for storeLogin happened before the concurrent storeToken
+    const expectedPrefix = [`store:${KEY_ACCOUNT}:carol`, `store:${KEY_PASSWORD}:pw`, `store:${KEY_TOKEN}:tok-A`, `store:${KEY_TOKEN}:tok-B`];
+    expect(mem.ops).toEqual(expectedPrefix);
+    // Final stored token should be the one from the second operation (tok-B)
+    const creds = await store.getCredentials();
+    expect(creds.token).toBe('tok-B');
+  });
 });

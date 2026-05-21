@@ -50,6 +50,18 @@ export function readExtensionConfig(configuration: WorkspaceConfigurationLike): 
 export class CredentialsStore {
   constructor(private readonly secrets: SecretStorageLike) {}
 
+  // Simple in-process serialization queue for write operations to avoid
+  // interleaving when multiple callers in the same extension host perform
+  // writes concurrently. This is intentionally not a cross-process lock.
+  private writeQueue: Promise<void> = Promise.resolve();
+
+  private runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+    const op = this.writeQueue.then(() => fn());
+    // Ensure the queue advances regardless of success or failure of op
+    this.writeQueue = op.then(() => undefined, () => undefined);
+    return op;
+  }
+
   async getCredentials(): Promise<ZenTaoCredentials> {
     const [account, password, token] = await Promise.all([
       this.secrets.get(KEY_ACCOUNT),
@@ -60,33 +72,53 @@ export class CredentialsStore {
   }
 
   async storeLogin(account: string, password: string, token: string): Promise<void> {
-    // Store sequentially to avoid partial writes from concurrent failures.
-    // If any write fails, rollback by deleting all credential keys.
-    try {
-      await this.secrets.store(KEY_ACCOUNT, account);
-      await this.secrets.store(KEY_PASSWORD, password);
-      await this.secrets.store(KEY_TOKEN, token);
-    } catch (err) {
-      // best-effort cleanup; swallow deletion errors but preserve original error
-      try {
-        // attempt to remove any keys that might have been written
-        await this.secrets.delete(KEY_ACCOUNT);
-      } catch {}
-      try {
-        await this.secrets.delete(KEY_PASSWORD);
-      } catch {}
-      try {
-        await this.secrets.delete(KEY_TOKEN);
-      } catch {}
-      throw err;
+    // Input validation
+    if (!account || account.trim().length === 0) {
+      throw new Error('account is required');
     }
+    if (!password || password.length === 0) {
+      throw new Error('password is required');
+    }
+    if (!token || token.trim().length === 0) {
+      throw new Error('token is required');
+    }
+
+    return this.runExclusive(async () => {
+      // Store sequentially to avoid partial writes from concurrent failures.
+      // If any write fails, rollback by deleting all credential keys.
+      try {
+        await this.secrets.store(KEY_ACCOUNT, account);
+        await this.secrets.store(KEY_PASSWORD, password);
+        await this.secrets.store(KEY_TOKEN, token);
+      } catch (err) {
+        // best-effort cleanup; swallow deletion errors but preserve original error
+        try {
+          // attempt to remove any keys that might have been written
+          await this.secrets.delete(KEY_ACCOUNT);
+        } catch {}
+        try {
+          await this.secrets.delete(KEY_PASSWORD);
+        } catch {}
+        try {
+          await this.secrets.delete(KEY_TOKEN);
+        } catch {}
+        throw err;
+      }
+    });
   }
 
   async storeToken(token: string): Promise<void> {
-    await this.secrets.store(KEY_TOKEN, token);
+    if (!token || token.trim().length === 0) {
+      throw new Error('token is required');
+    }
+    return this.runExclusive(async () => {
+      await this.secrets.store(KEY_TOKEN, token);
+    });
   }
 
   async clearToken(): Promise<void> {
-    await this.secrets.delete(KEY_TOKEN);
+    return this.runExclusive(async () => {
+      await this.secrets.delete(KEY_TOKEN);
+    });
   }
 }
