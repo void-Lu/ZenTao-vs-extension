@@ -1,6 +1,13 @@
 .superpowers/**
 docs/superpowers/**
 src/**/*.test.ts
+src/**
 out/**/*.test.js
 node_modules/**/.cache/**
 out/**/*.map
+.omc/**
+resources/test-account-info.txt
+dist/**
+tsconfig.json
+vitest.config.ts
+.gitignore
