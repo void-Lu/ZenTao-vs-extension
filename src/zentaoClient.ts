@@ -1,4 +1,4 @@
-import RequestLogger from './requestLogger';
+import RequestLogger, { redactSensitiveText } from './requestLogger';
 
 export interface ZenTaoClientOptions {
   baseUrl: string;
@@ -81,7 +81,7 @@ export class ZenTaoClient {
     const total = (first as any).total;
     const limit = (first as any).limit;
 
-    if (!page || !total || !limit || limit >= total) return first;
+    if (page == null || total == null || limit == null || limit >= total) return first;
 
     const separator = path.includes('?') ? '&' : '?';
     return this.get<T>(`${path}${separator}limit=${total}`);
@@ -149,7 +149,7 @@ export class ZenTaoClient {
       this.options.logger.log({ method, path: `/api.php/v1/${path}`, status: (response as any).status, durationMs: Date.now() - started });
 
       if (!(response as any).ok) {
-        throw new ZenTaoApiError(`ZenTao request failed with status ${(response as any).status}`, (response as any).status, path);
+        throw new ZenTaoApiError(`ZenTao request failed with status ${(response as any).status}`, (response as any).status, redactSensitiveText(path));
       }
 
       return response as Response;

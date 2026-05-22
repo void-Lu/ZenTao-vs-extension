@@ -111,4 +111,20 @@ describe('ZenTaoClient', () => {
       Object.defineProperty(globalThis, 'fetch', { configurable: true, value: originalFetch });
     }
   });
+
+  it('redacts sensitive values from API error paths', async () => {
+    const client = new ZenTaoClient({
+      baseUrl: 'https://zentao.example.com/',
+      timeoutMs: 5000,
+      getToken: async () => 'abc',
+      setToken: async () => undefined,
+      logger: new RequestLogger({ appendLine() {}, show() {} } as any),
+      fetch: async () => jsonResponse({ error: 'nope' }, 403)
+    });
+
+    await expect(client.get('projects/123?token=abc123&password=secret')).rejects.toMatchObject({
+      status: 403,
+      path: 'projects/123?token=[REDACTED]&password=[REDACTED]'
+    });
+  });
 });
