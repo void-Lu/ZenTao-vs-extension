@@ -1,0 +1,156 @@
+import RequestLogger from './requestLogger';
+
+export interface ZenTaoClientOptions {
+  baseUrl: string;
+  timeoutMs: number;
+  getToken(): Promise<string | undefined>;
+  setToken(token: string): Promise<void>;
+  logger: RequestLogger;
+  fetch?: typeof fetch;
+}
+
+export class ZenTaoApiError extends Error {
+  constructor(message: string, public readonly status: number | undefined, public readonly path: string) {
+    super(message);
+    Object.setPrototypeOf(this, ZenTaoApiError.prototype);
+  }
+}
+
+export class ZenTaoClient {
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(private readonly options: ZenTaoClientOptions) {
+    this.fetchImpl = options.fetch ?? (globalThis as any).fetch.bind(globalThis);
+  }
+
+  async login(account: string, password: string): Promise<string> {
+    const resp = await this.request<{ token: string }>('tokens', {
+      method: 'POST',
+      body: JSON.stringify({ account, password }),
+      withoutToken: true
+    });
+
+    const token = (resp as any).token as string;
+    if (!token) throw new ZenTaoApiError('Login did not return a token', undefined, 'tokens');
+    await this.options.setToken(token);
+    return token;
+  }
+
+  async getProject(projectId: number): Promise<unknown> {
+    return this.get(`projects/${projectId}`);
+  }
+
+  async getProjectStories(projectId: number): Promise<unknown> {
+    return this.getAll(`projects/${projectId}/stories`);
+  }
+
+  async getProjectExecutions(projectId: number): Promise<unknown> {
+    return this.getAll(`projects/${projectId}/executions`);
+  }
+
+  async getExecutionTasks(executionId: number): Promise<unknown> {
+    return this.getAll(`executions/${executionId}/tasks`);
+  }
+
+  async getStory(storyId: number): Promise<unknown> {
+    return this.get(`stories/${storyId}`);
+  }
+
+  async getTask(taskId: number): Promise<unknown> {
+    return this.get(`tasks/${taskId}`);
+  }
+
+  async get<T>(path: string): Promise<T> {
+    return this.request<T>(path, { method: 'GET' });
+  }
+
+  async getAll<T extends { page?: number; total?: number; limit?: number }>(path: string): Promise<T> {
+    const first = await this.get<T>(path);
+    if (!first || typeof first !== 'object') return first;
+
+    const page = (first as any).page;
+    const total = (first as any).total;
+    const limit = (first as any).limit;
+
+    if (!page || !total || !limit || limit >= total) return first;
+
+    const separator = path.includes('?') ? '&' : '?';
+    return this.get<T>(`${path}${separator}limit=${total}`);
+  }
+
+  async downloadByPath(path: string): Promise<Uint8Array> {
+    const response = await this.rawRequest(path, { method: 'GET' });
+    const buf = await response.arrayBuffer();
+    return new Uint8Array(buf);
+  }
+
+  private buildUrl(path: string): string {
+    // Avoid duplicating /api.php/v1/ if baseUrl already contains it
+    const base = this.options.baseUrl.endsWith('/') ? this.options.baseUrl : `${this.options.baseUrl}/`;
+    const apiSuffix = '/api.php/v1/';
+    const apiSuffixNoSlash = '/api.php/v1';
+
+    if (base.endsWith(apiSuffix)) {
+      return new URL(path, base).toString();
+    }
+    if (base.endsWith(apiSuffixNoSlash + '/')) {
+      return new URL(path, base).toString();
+    }
+    if (base.endsWith(apiSuffixNoSlash)) {
+      return new URL(path, base + '/').toString();
+    }
+
+    return new URL(`api.php/v1/${path}`, base).toString();
+  }
+
+  private async request<T>(path: string, init: RequestInit & { withoutToken?: boolean }): Promise<T> {
+    const resp = await this.rawRequest(path, init);
+    return resp.json() as Promise<T>;
+  }
+
+  private async rawRequest(path: string, init: RequestInit & { withoutToken?: boolean }): Promise<Response> {
+    const method = init.method ?? 'GET';
+    const url = this.buildUrl(path);
+    const started = Date.now();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs);
+
+    try {
+      const headers: Record<string, string> = {};
+      // Default Content-Type only when body present and not explicitly provided
+      if (init.body && !(init.headers && (init.headers as any)['Content-Type'])) {
+        headers['Content-Type'] = 'application/json';
+      }
+
+      if (!init.withoutToken) {
+        try {
+          const token = await this.options.getToken();
+          if (token) headers['Token'] = token;
+        } catch {
+          // ignore getToken errors; proceed without token
+        }
+      }
+
+      const response = await this.fetchImpl(url, {
+        ...init,
+        signal: controller.signal,
+        headers: { ...headers, ...(init.headers as any ?? {}) }
+      } as any);
+
+      this.options.logger.log({ method, path: `/api.php/v1/${path}`, status: (response as any).status, durationMs: Date.now() - started });
+
+      if (!(response as any).ok) {
+        throw new ZenTaoApiError(`ZenTao request failed with status ${(response as any).status}`, (response as any).status, path);
+      }
+
+      return response as Response;
+    } catch (error) {
+      this.options.logger.log({ method, path: `/api.php/v1/${path}`, durationMs: Date.now() - started, error });
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+export default ZenTaoClient;
