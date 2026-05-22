@@ -75,4 +75,40 @@ describe('ZenTaoClient', () => {
     await client.login('u', 'p');
     expect(fetches[0]).toBe('https://zentao.example.com/api.php/v1/tokens');
   });
+
+  it('sets Token header and preserves caller headers', async () => {
+    let sentHeaders: Headers | undefined;
+    const client = new ZenTaoClient({
+      baseUrl: 'https://zentao.example.com/',
+      timeoutMs: 5000,
+      getToken: async () => 'abc',
+      setToken: async () => undefined,
+      logger: new RequestLogger({ appendLine() {}, show() {} } as any),
+      fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
+        sentHeaders = new Headers(init?.headers);
+        return jsonResponse({ id: 1 });
+      }
+    });
+
+    await client.get('projects/123');
+
+    expect(sentHeaders?.get('Token')).toBe('abc');
+  });
+
+  it('throws a clear error when no fetch implementation is available', () => {
+    const originalFetch = globalThis.fetch;
+    Object.defineProperty(globalThis, 'fetch', { configurable: true, value: undefined });
+
+    try {
+      expect(() => new ZenTaoClient({
+        baseUrl: 'https://zentao.example.com/',
+        timeoutMs: 5000,
+        getToken: async () => undefined,
+        setToken: async () => undefined,
+        logger: new RequestLogger({ appendLine() {}, show() {} } as any)
+      })).toThrow('No fetch implementation available. Pass fetch in ZenTaoClientOptions.');
+    } finally {
+      Object.defineProperty(globalThis, 'fetch', { configurable: true, value: originalFetch });
+    }
+  });
 });

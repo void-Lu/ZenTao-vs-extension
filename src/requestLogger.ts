@@ -17,6 +17,12 @@ export function redactSensitiveText(value: string): string {
 
   let out = String(value);
 
+  // Redact JSON "token":"secret" / "Token":"secret" fields.
+  out = out.replace(/("token"\s*:\s*")([^"]*)(")/gi, '$1[REDACTED]$3');
+
+  // Redact Token header forms like Token: abc or Token:abc.
+  out = out.replace(/\bToken\s*:\s*[^\s,;\r\n]+/gi, 'Token: [REDACTED]');
+
   // Redact Token <token>
   out = out.replace(/\bToken\s+\S+/gi, 'Token [REDACTED]');
 
@@ -60,12 +66,13 @@ export function toLogLine(entry: RequestLogEntry): string {
   let base = `${ts} ${method} ${path} ${status} ${duration}`;
 
   if (entry.error) {
-    // Attempt to get message
     let msg: string;
     if (typeof entry.error === 'string') msg = entry.error;
     else if (entry.error instanceof Error) msg = entry.error.message || String(entry.error);
-    else {
-      try { msg = JSON.stringify(entry.error); } catch { msg = String(entry.error); }
+    else if (entry.error && typeof entry.error === 'object' && typeof (entry.error as { message?: unknown }).message === 'string') {
+      msg = (entry.error as { message: string }).message;
+    } else {
+      msg = String(entry.error ?? '');
     }
 
     const redacted = redactSensitiveText(msg || '');

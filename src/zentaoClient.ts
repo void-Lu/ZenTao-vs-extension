@@ -20,7 +20,16 @@ export class ZenTaoClient {
   private readonly fetchImpl: typeof fetch;
 
   constructor(private readonly options: ZenTaoClientOptions) {
-    this.fetchImpl = options.fetch ?? (globalThis as any).fetch.bind(globalThis);
+    if (options.fetch) {
+      this.fetchImpl = options.fetch;
+      return;
+    }
+
+    if (typeof globalThis.fetch !== 'function') {
+      throw new Error('No fetch implementation available. Pass fetch in ZenTaoClientOptions.');
+    }
+
+    this.fetchImpl = globalThis.fetch.bind(globalThis);
   }
 
   async login(account: string, password: string): Promise<string> {
@@ -116,16 +125,16 @@ export class ZenTaoClient {
     const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs);
 
     try {
-      const headers: Record<string, string> = {};
+      const headers = new Headers(init.headers);
       // Default Content-Type only when body present and not explicitly provided
-      if (init.body && !(init.headers && (init.headers as any)['Content-Type'])) {
-        headers['Content-Type'] = 'application/json';
+      if (init.body && !headers.has('Content-Type')) {
+        headers.set('Content-Type', 'application/json');
       }
 
       if (!init.withoutToken) {
         try {
           const token = await this.options.getToken();
-          if (token) headers['Token'] = token;
+          if (token) headers.set('Token', token);
         } catch {
           // ignore getToken errors; proceed without token
         }
@@ -134,8 +143,8 @@ export class ZenTaoClient {
       const response = await this.fetchImpl(url, {
         ...init,
         signal: controller.signal,
-        headers: { ...headers, ...(init.headers as any ?? {}) }
-      } as any);
+        headers
+      });
 
       this.options.logger.log({ method, path: `/api.php/v1/${path}`, status: (response as any).status, durationMs: Date.now() - started });
 

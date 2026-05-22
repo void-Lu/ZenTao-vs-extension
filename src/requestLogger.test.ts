@@ -80,9 +80,14 @@ describe('redactSensitiveText', () => {
   it('redacts Authorization: Token forms and does not miss Token in header forms', () => {
     const a = 'Authorization: Token abc123';
     const b = 'Token abc123';
+    const c = 'Token: abc123';
+    const d = '{"Token":"abc123","token":"def456"}';
 
     expect(redactSensitiveText(a)).not.toContain('abc123');
     expect(redactSensitiveText(b)).not.toContain('abc123');
+    expect(redactSensitiveText(c)).not.toContain('abc123');
+    expect(redactSensitiveText(d)).not.toContain('abc123');
+    expect(redactSensitiveText(d)).not.toContain('def456');
     expect(redactSensitiveText(a)).toContain('[REDACTED]');
   });
 
@@ -140,6 +145,22 @@ describe('toLogLine', () => {
     expect(line).not.toContain('secret');
     expect(line).not.toContain('abc123');
     expect(line).toContain('[REDACTED]');
+  });
+
+  it('does not stringify arbitrary error objects into the request log', () => {
+    const line = toLogLine({
+      method: 'GET',
+      path: '/api.php/v1/projects/123',
+      status: 500,
+      durationMs: 9,
+      error: { message: 'Request failed', headers: { Token: 'abc123' }, body: { password: 'secret' } }
+    });
+
+    expect(line).toContain('Request failed');
+    expect(line).not.toContain('abc123');
+    expect(line).not.toContain('secret');
+    expect(line).not.toContain('headers');
+    expect(line).not.toContain('body');
   });
 });
 
