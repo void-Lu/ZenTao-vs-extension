@@ -3,6 +3,7 @@ import { escapeHtml, sanitizeRichHtml } from './html';
 import { redactSensitiveText } from './requestLogger';
 
 type AnyRecord = Record<string, unknown>;
+const sensitiveRawJsonKeys = new Set(['token', 'password', 'cookie']);
 
 function asRecord(value: unknown): AnyRecord {
   return value && typeof value === 'object' ? value as AnyRecord : {};
@@ -32,6 +33,10 @@ function stringValue(value: unknown, fallback = ''): string {
 function priority(value: unknown): string {
   const raw = stringValue(value, '-');
   return raw.startsWith('P') ? raw : `P${raw}`;
+}
+
+function redactSensitiveRawJsonKey(key: string, value: unknown): unknown {
+  return sensitiveRawJsonKeys.has(key.toLowerCase()) ? '[REDACTED]' : value;
 }
 
 function extractAttachments(raw: AnyRecord): AttachmentViewModel[] {
@@ -91,5 +96,5 @@ export function toDetailViewModel(type: ZenTaoItemType, value: unknown): DetailV
 }
 
 export function escapedJson(value: unknown): string {
-  return escapeHtml(redactSensitiveText(JSON.stringify(value, null, 2)));
+  return escapeHtml(redactSensitiveText(JSON.stringify(value, redactSensitiveRawJsonKey, 2)));
 }

@@ -52,4 +52,25 @@ describe('escapedJson', () => {
     expect(html).toContain('[REDACTED]');
     expect(html).toContain('&lt;b&gt;safe&lt;/b&gt;');
   });
+
+  it('redacts sensitive raw JSON keys with embedded quotes recursively', () => {
+    const html = escapedJson({
+      password: 'pw"tail',
+      nested: {
+        Token: 'tok"tail',
+        items: [
+          { cookie: 'sid="abc"; x=1' },
+          { name: 'safe value' }
+        ]
+      }
+    });
+
+    expect(html).not.toContain('pw');
+    expect(html).not.toContain('tok');
+    expect(html).not.toContain('tail');
+    expect(html).not.toContain('sid=');
+    expect(html).not.toContain('abc');
+    expect(html).not.toContain('x=1');
+    expect(html).toContain('safe value');
+  });
 });
