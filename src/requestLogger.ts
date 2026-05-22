@@ -12,9 +12,10 @@ export interface OutputChannelLike {
 }
 
 export function redactSensitiveText(value: string): string {
-  if (!value) return value;
+  // Ensure we always return a string even when called unsafely at runtime
+  if (value == null) return '';
 
-  let out = value;
+  let out = String(value);
 
   // Redact Token <token>
   out = out.replace(/\bToken\s+\S+/gi, 'Token [REDACTED]');
@@ -34,7 +35,13 @@ export function redactSensitiveText(value: string): string {
 
   // Redact Cookie header/value like 'Cookie sid=xyz' or 'Cookie: sid=xyz; theme=dark'
   // Replace the entire Cookie header/value line
-  out = out.replace(/\bCookie(?:[:\s]).*/gi, 'Cookie [REDACTED]');
+  // Use line-based replacement so we don't consume following lines in multi-line strings
+  // Match Cookie header/value until end-of-line (or end-of-string), case-insensitive
+  out = out.replace(/\bCookie(?:[:\s])[^\r\n]*/gi, 'Cookie [REDACTED]');
+
+  // Redact obvious secret-bearing path segments like /token/<secret>, /password/<secret>, /auth/<secret>, /session/<secret>
+  // Do not match plural forms like /tokens
+  out = out.replace(/\/(token|password|auth|session)\/([^\/\s?#]+)/gi, '/$1/[REDACTED]');
 
   return out;
 }

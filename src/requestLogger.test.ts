@@ -30,6 +30,49 @@ describe('redactSensitiveText', () => {
     expect(out).toContain('Cookie');
     expect(out).toContain('[REDACTED]');
   });
+
+  it('redacts secret-bearing path segments but not plain plural endpoints', () => {
+    const a = '/api.php/v1/token/abc123';
+    const b = '/api.php/v1/password/secret';
+    const c = '/api.php/v1/auth/abc123';
+    const d = '/api.php/v1/session/abc123';
+    const plural = '/api.php/v1/tokens';
+
+    expect(redactSensitiveText(a)).toContain('/api.php/v1/token/[REDACTED]');
+    expect(redactSensitiveText(b)).toContain('/api.php/v1/password/[REDACTED]');
+    expect(redactSensitiveText(c)).toContain('/api.php/v1/auth/[REDACTED]');
+    expect(redactSensitiveText(d)).toContain('/api.php/v1/session/[REDACTED]');
+
+    // ensure plural endpoint name is not redacted accidentally
+    expect(redactSensitiveText(plural)).toBe(plural);
+  });
+
+  it('always returns a string even when called with null/undefined at runtime', () => {
+    // call with any to simulate unsafe runtime usage
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(typeof (redactSensitiveText as any)(null)).toBe('string');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(typeof (redactSensitiveText as any)(undefined)).toBe('string');
+  });
+
+  it('redacts Authorization: Token forms and does not miss Token in header forms', () => {
+    const a = 'Authorization: Token abc123';
+    const b = 'Token abc123';
+
+    expect(redactSensitiveText(a)).not.toContain('abc123');
+    expect(redactSensitiveText(b)).not.toContain('abc123');
+    expect(redactSensitiveText(a)).toContain('[REDACTED]');
+  });
+
+  it('redacts only the cookie header line and leaves other lines intact', () => {
+    const multi = 'Cookie: sid=xyz; theme=dark\nX-Custom: sid=xyz';
+    const out = redactSensitiveText(multi);
+    // cookie value should be redacted
+    expect(out).toContain('Cookie');
+    expect(out).toContain('[REDACTED]');
+    // other header line must remain unchanged (not swallowed)
+    expect(out).toContain('X-Custom: sid=xyz');
+  });
 });
 
 describe('toLogLine', () => {
