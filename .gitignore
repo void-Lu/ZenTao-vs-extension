@@ -4,3 +4,5 @@ out/
 dist/
 .vscode-test/
 *.vsix
+resources/test-account-info.txt
+.omc
