@@ -31,6 +31,28 @@ describe('redactSensitiveText', () => {
     expect(out).toContain('[REDACTED]');
   });
 
+  it('redacts Set-Cookie header/value lines (case-insensitive) without swallowing following lines', () => {
+    const a = 'Set-Cookie: sid=secret; Path=/';
+    const b = 'set-cookie: sid=secret; Path=/';
+    const multi = 'Set-Cookie: sid=secret; Path=/\nX-Next: value';
+
+    const outA = redactSensitiveText(a);
+    const outB = redactSensitiveText(b);
+    const outMulti = redactSensitiveText(multi);
+
+    expect(outA).not.toContain('sid=secret');
+    expect(outA).toContain('Set-Cookie');
+    expect(outA).toContain('[REDACTED]');
+
+    expect(outB).not.toContain('sid=secret');
+    // case-insensitive: the implementation may preserve part of the original casing
+    expect(outB.toLowerCase()).toContain('set-cookie');
+    expect(outB).toContain('[REDACTED]');
+
+    // ensure only the Set-Cookie line is redacted and next header remains
+    expect(outMulti).toContain('X-Next: value');
+  });
+
   it('redacts secret-bearing path segments but not plain plural endpoints', () => {
     const a = '/api.php/v1/token/abc123';
     const b = '/api.php/v1/password/secret';
