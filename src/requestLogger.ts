@@ -19,14 +19,22 @@ export function redactSensitiveText(value: string): string {
   // Redact Token <token>
   out = out.replace(/\bToken\s+\S+/gi, 'Token [REDACTED]');
 
+  // Redact Bearer and Authorization: Bearer <token>
+  out = out.replace(/\bAuthorization\s*:\s*Bearer\s+\S+/gi, 'Authorization: Bearer [REDACTED]');
+  out = out.replace(/\bBearer\s+\S+/gi, 'Bearer [REDACTED]');
+
+  // Redact token= in query/string
+  out = out.replace(/\btoken=([^\s;,&]+)/gi, 'token=[REDACTED]');
+
   // Redact password=secret style
   out = out.replace(/\bpassword=([^\s;,&]+)/gi, 'password=[REDACTED]');
 
   // Redact JSON "password":"secret" (allow spaces) and normalize spacing to "password":"[REDACTED]"
   out = out.replace(/("password"\s*:\s*")([^"]*)(")/gi, '"password":"[REDACTED]"');
 
-  // Redact Cookie header/value like 'Cookie sid=xyz' or 'Cookie: sid=xyz;'
-  out = out.replace(/\bCookie[:\s]+[^;\s]+(?:=[^;\s]+)?/gi, 'Cookie [REDACTED]');
+  // Redact Cookie header/value like 'Cookie sid=xyz' or 'Cookie: sid=xyz; theme=dark'
+  // Replace the entire Cookie header/value line
+  out = out.replace(/\bCookie(?:[:\s]).*/gi, 'Cookie [REDACTED]');
 
   return out;
 }
@@ -53,7 +61,8 @@ export function toLogLine(entry: RequestLogEntry): string {
     base += ` error: ${redacted}`;
   }
 
-  return base;
+  // Ensure the full line is redacted (path, query, headers may contain secrets)
+  return redactSensitiveText(base);
 }
 
 export class RequestLogger {

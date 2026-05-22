@@ -12,6 +12,24 @@ describe('redactSensitiveText', () => {
     expect(redactSensitiveText(text)).toContain('"password":"[REDACTED]"');
     expect(redactSensitiveText(text)).toContain('password=[REDACTED]');
   });
+
+  it('redacts Bearer tokens and Authorization header forms', () => {
+    const a = 'Bearer abc123';
+    const b = 'Authorization: Bearer abc123';
+
+    expect(redactSensitiveText(a)).not.toContain('abc123');
+    expect(redactSensitiveText(b)).not.toContain('abc123');
+    expect(redactSensitiveText(b)).toContain('[REDACTED]');
+  });
+
+  it('redacts complex Cookie header/value lines', () => {
+    const c = 'Cookie: sid=xyz; theme=dark; other=1';
+    const out = redactSensitiveText(c);
+    expect(out).not.toContain('xyz');
+    expect(out).not.toContain('theme=dark');
+    expect(out).toContain('Cookie');
+    expect(out).toContain('[REDACTED]');
+  });
 });
 
 describe('toLogLine', () => {
@@ -41,6 +59,21 @@ describe('toLogLine', () => {
     expect(line).not.toContain('abc123');
     expect(line).not.toContain('secret');
     expect(line).not.toContain('zzz');
+    expect(line).toContain('[REDACTED]');
+  });
+
+  it('redacts secrets present in the path/query when formatting', () => {
+    const entry = {
+      method: 'GET',
+      path: '/api/data?password=secret&token=abc123&other=1',
+      status: 200,
+      durationMs: 5
+    } as const;
+
+    const line = toLogLine(entry as any);
+    expect(line).toContain('GET /api/data');
+    expect(line).not.toContain('secret');
+    expect(line).not.toContain('abc123');
     expect(line).toContain('[REDACTED]');
   });
 });
