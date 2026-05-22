@@ -76,6 +76,29 @@ describe('ZenTaoClient', () => {
     expect(fetches[0]).toBe('https://zentao.example.com/api.php/v1/tokens');
   });
 
+  it('normalizes API paths with leading slashes or API prefixes', async () => {
+    const fetches: string[] = [];
+    const client = new ZenTaoClient({
+      baseUrl: 'https://zentao.example.com/',
+      timeoutMs: 5000,
+      getToken: async () => undefined,
+      setToken: async () => undefined,
+      logger: new RequestLogger({ appendLine() {}, show() {} } as any),
+      fetch: async (input: RequestInfo | URL) => {
+        fetches.push(String(input));
+        return jsonResponse({ id: 1 });
+      }
+    });
+
+    await client.get('/projects/123');
+    await client.get('/api.php/v1/projects/456');
+
+    expect(fetches).toEqual([
+      'https://zentao.example.com/api.php/v1/projects/123',
+      'https://zentao.example.com/api.php/v1/projects/456'
+    ]);
+  });
+
   it('sets Token header and preserves caller headers', async () => {
     let sentHeaders: Headers | undefined;
     const client = new ZenTaoClient({
@@ -93,6 +116,25 @@ describe('ZenTaoClient', () => {
     await client.get('projects/123');
 
     expect(sentHeaders?.get('Token')).toBe('abc');
+  });
+
+  it('does not pass internal withoutToken flag to fetch', async () => {
+    let sentInit: Record<string, unknown> | undefined;
+    const client = new ZenTaoClient({
+      baseUrl: 'https://zentao.example.com/',
+      timeoutMs: 5000,
+      getToken: async () => undefined,
+      setToken: async () => undefined,
+      logger: new RequestLogger({ appendLine() {}, show() {} } as any),
+      fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
+        sentInit = init as Record<string, unknown>;
+        return jsonResponse({ token: 'abc' });
+      }
+    });
+
+    await client.login('admin', 'secret');
+
+    expect(sentInit).not.toHaveProperty('withoutToken');
   });
 
   it('throws a clear error when no fetch implementation is available', () => {

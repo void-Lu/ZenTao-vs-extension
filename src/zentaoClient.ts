@@ -94,22 +94,25 @@ export class ZenTaoClient {
   }
 
   private buildUrl(path: string): string {
+    let normalizedPath = path.replace(/^\/+/, '');
+    normalizedPath = normalizedPath.replace(/^api\.php\/v1\/?/i, '');
+
     // Avoid duplicating /api.php/v1/ if baseUrl already contains it
     const base = this.options.baseUrl.endsWith('/') ? this.options.baseUrl : `${this.options.baseUrl}/`;
     const apiSuffix = '/api.php/v1/';
     const apiSuffixNoSlash = '/api.php/v1';
 
     if (base.endsWith(apiSuffix)) {
-      return new URL(path, base).toString();
+      return new URL(normalizedPath, base).toString();
     }
     if (base.endsWith(apiSuffixNoSlash + '/')) {
-      return new URL(path, base).toString();
+      return new URL(normalizedPath, base).toString();
     }
     if (base.endsWith(apiSuffixNoSlash)) {
-      return new URL(path, base + '/').toString();
+      return new URL(normalizedPath, base + '/').toString();
     }
 
-    return new URL(`api.php/v1/${path}`, base).toString();
+    return new URL(`api.php/v1/${normalizedPath}`, base).toString();
   }
 
   private async request<T>(path: string, init: RequestInit & { withoutToken?: boolean }): Promise<T> {
@@ -118,6 +121,7 @@ export class ZenTaoClient {
   }
 
   private async rawRequest(path: string, init: RequestInit & { withoutToken?: boolean }): Promise<Response> {
+    const { withoutToken, ...fetchInit } = init;
     const method = init.method ?? 'GET';
     const url = this.buildUrl(path);
     const started = Date.now();
@@ -131,7 +135,7 @@ export class ZenTaoClient {
         headers.set('Content-Type', 'application/json');
       }
 
-      if (!init.withoutToken) {
+      if (!withoutToken) {
         try {
           const token = await this.options.getToken();
           if (token) headers.set('Token', token);
@@ -141,7 +145,7 @@ export class ZenTaoClient {
       }
 
       const response = await this.fetchImpl(url, {
-        ...init,
+        ...fetchInit,
         signal: controller.signal,
         headers
       });
@@ -154,7 +158,8 @@ export class ZenTaoClient {
 
       return response as Response;
     } catch (error) {
-      this.options.logger.log({ method, path: `/api.php/v1/${path}`, durationMs: Date.now() - started, error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.options.logger.log({ method, path: `/api.php/v1/${path}`, durationMs: Date.now() - started, error: redactSensitiveText(message) });
       throw error;
     } finally {
       clearTimeout(timeout);
