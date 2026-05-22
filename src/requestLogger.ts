@@ -39,6 +39,9 @@ export function redactSensitiveText(value: string): string {
   // Redact JSON "password":"secret" (allow spaces) and normalize spacing to "password":"[REDACTED]"
   out = out.replace(/("password"\s*:\s*")([^"]*)(")/gi, '"password":"[REDACTED]"');
 
+  // Redact JSON "cookie":"secret" fields.
+  out = out.replace(/("cookie"\s*:\s*")([^"]*)(")/gi, '$1[REDACTED]$3');
+
   // Redact Set-Cookie header/value like 'Set-Cookie: sid=xyz; Path=/'
   // Use line-based replacement so we don't consume following lines in multi-line strings
   out = out.replace(/\bSet-Cookie(?:[:\s])[^\r\n]*/gi, 'Set-Cookie [REDACTED]');

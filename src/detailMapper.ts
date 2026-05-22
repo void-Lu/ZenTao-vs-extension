@@ -1,5 +1,6 @@
 import { AttachmentViewModel, DetailViewModel, ZenTaoItemType, ActivityViewModel } from './types';
 import { escapeHtml, sanitizeRichHtml } from './html';
+import { redactSensitiveText } from './requestLogger';
 
 type AnyRecord = Record<string, unknown>;
 
@@ -90,5 +91,5 @@ export function toDetailViewModel(type: ZenTaoItemType, value: unknown): DetailV
 }
 
 export function escapedJson(value: unknown): string {
-  return escapeHtml(JSON.stringify(value, null, 2));
+  return escapeHtml(redactSensitiveText(JSON.stringify(value, null, 2)));
 }

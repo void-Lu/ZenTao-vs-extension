@@ -13,6 +13,16 @@ describe('redactSensitiveText', () => {
     expect(redactSensitiveText(text)).toContain('password=[REDACTED]');
   });
 
+  it('redacts JSON cookie fields', () => {
+    const text = '{"cookie":"sid=secret; theme=dark","ok":"value"}';
+    const out = redactSensitiveText(text);
+
+    expect(out).not.toContain('sid=secret');
+    expect(out).not.toContain('theme=dark');
+    expect(out).toContain('"ok":"value"');
+    expect(out).toContain('[REDACTED]');
+  });
+
   it('redacts Bearer tokens and Authorization header forms', () => {
     const a = 'Bearer abc123';
     const b = 'Authorization: Bearer abc123';
