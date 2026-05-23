@@ -45,6 +45,10 @@ export class ZenTaoClient {
     return token;
   }
 
+  async getProjects(): Promise<unknown> {
+    return this.getAll('projects');
+  }
+
   async getProject(projectId: number): Promise<unknown> {
     return this.get(`projects/${projectId}`);
   }

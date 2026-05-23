@@ -1,9 +1,13 @@
-import { ExtensionConfig, ZenTaoCredentials } from './types';
+import { ConnectionConfig, ExtensionConfig, ZenTaoCredentials } from './types';
 
 // Public keys used for secret storage. Keep these stable as part of the public behavior.
 export const KEY_ACCOUNT = 'zentao.account';
 export const KEY_PASSWORD = 'zentao.password';
 export const KEY_TOKEN = 'zentao.token';
+
+function tokenKey(baseUrl?: string): string {
+  return baseUrl ? `${KEY_TOKEN}.${Buffer.from(baseUrl).toString('base64url')}` : KEY_TOKEN;
+}
 
 export interface WorkspaceConfigurationLike {
   get<T>(key: string): T | undefined;
@@ -41,16 +45,26 @@ export function normalizeBaseUrl(raw: string): string {
   return url.toString().endsWith('/') ? url.toString() : `${url.toString()}/`;
 }
 
-export function readExtensionConfig(configuration: WorkspaceConfigurationLike): ExtensionConfig {
+export function readConnectionConfig(configuration: WorkspaceConfigurationLike): ConnectionConfig {
   const baseUrl = normalizeBaseUrl(configuration.get<string>('baseUrl') ?? '');
-  const projectId = configuration.get<number>('projectId') ?? 0;
   const requestTimeout = configuration.get<number>('requestTimeout') ?? 15000;
+  return { baseUrl, requestTimeout };
+}
 
-  if (!Number.isInteger(projectId) || projectId <= 0) {
+export function readOptionalProjectId(configuration: WorkspaceConfigurationLike): number | undefined {
+  const projectId = configuration.get<number>('projectId') ?? 0;
+  return Number.isInteger(projectId) && projectId > 0 ? projectId : undefined;
+}
+
+export function readExtensionConfig(configuration: WorkspaceConfigurationLike): ExtensionConfig {
+  const connection = readConnectionConfig(configuration);
+  const projectId = readOptionalProjectId(configuration);
+
+  if (projectId === undefined) {
     throw new Error('ZenTao project ID must be a positive integer.');
   }
 
-  return { baseUrl, projectId, requestTimeout };
+  return { ...connection, projectId };
 }
 
 export class CredentialsStore {
@@ -70,16 +84,16 @@ export class CredentialsStore {
     return op;
   }
 
-  async getCredentials(): Promise<ZenTaoCredentials> {
+  async getCredentials(baseUrl?: string): Promise<ZenTaoCredentials> {
     const [account, password, token] = await Promise.all([
       this.secrets.get(KEY_ACCOUNT),
       this.secrets.get(KEY_PASSWORD),
-      this.secrets.get(KEY_TOKEN)
+      this.secrets.get(tokenKey(baseUrl))
     ]);
     return { account, password, token };
   }
 
-  async storeLogin(account: string, password: string, token: string): Promise<void> {
+  async storeLogin(account: string, password: string, token: string, baseUrl?: string): Promise<void> {
     // Input validation
     if (!account || account.trim().length === 0) {
       throw new Error('account is required');
@@ -97,7 +111,7 @@ export class CredentialsStore {
       try {
         await this.secrets.store(KEY_ACCOUNT, account);
         await this.secrets.store(KEY_PASSWORD, password);
-        await this.secrets.store(KEY_TOKEN, token);
+        await this.secrets.store(tokenKey(baseUrl), token);
       } catch (err) {
         // Attempt cleanup by deleting any keys that may have been written.
         // If cleanup succeeds, rethrow the original error. If cleanup
@@ -116,7 +130,7 @@ export class CredentialsStore {
           rollbackErrors.push(e);
         }
         try {
-          await this.secrets.delete(KEY_TOKEN);
+          await this.secrets.delete(tokenKey(baseUrl));
         } catch (e) {
           rollbackErrors.push(e);
         }
@@ -133,18 +147,18 @@ export class CredentialsStore {
     });
   }
 
-  async storeToken(token: string): Promise<void> {
+  async storeToken(token: string, baseUrl?: string): Promise<void> {
     if (!token || token.trim().length === 0) {
       throw new Error('token is required');
     }
     return this.runExclusive(async () => {
-      await this.secrets.store(KEY_TOKEN, token);
+      await this.secrets.store(tokenKey(baseUrl), token);
     });
   }
 
-  async clearToken(): Promise<void> {
+  async clearToken(baseUrl?: string): Promise<void> {
     return this.runExclusive(async () => {
-      await this.secrets.delete(KEY_TOKEN);
+      await this.secrets.delete(tokenKey(baseUrl));
     });
   }
 }

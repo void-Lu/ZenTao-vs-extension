@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeBaseUrl, readExtensionConfig, CredentialsStore, KEY_ACCOUNT, KEY_PASSWORD, KEY_TOKEN } from './configuration';
+import { normalizeBaseUrl, readConnectionConfig, readExtensionConfig, readOptionalProjectId, CredentialsStore, KEY_ACCOUNT, KEY_PASSWORD, KEY_TOKEN } from './configuration';
 
 class InMemorySecrets {
   private storage = new Map<string, string>();
@@ -37,6 +37,48 @@ describe('normalizeBaseUrl', () => {
   });
 });
 
+describe('readConnectionConfig', () => {
+  it('reads base URL and timeout without requiring a project ID', () => {
+    const config = readConnectionConfig({
+      get<T>(key: string): T | undefined {
+        const values: Record<string, unknown> = {
+          baseUrl: 'http://127.0.0.1/zentao',
+          requestTimeout: 7000
+        };
+        return values[key] as T | undefined;
+      }
+    });
+
+    expect(config).toEqual({
+      baseUrl: 'http://127.0.0.1/zentao/',
+      requestTimeout: 7000
+    });
+  });
+});
+
+describe('readOptionalProjectId', () => {
+  it('returns a positive integer project ID when configured', () => {
+    const projectId = readOptionalProjectId({
+      get<T>(key: string): T | undefined {
+        return (key === 'projectId' ? 123 : undefined) as T | undefined;
+      }
+    });
+
+    expect(projectId).toBe(123);
+  });
+
+  it('returns undefined when project ID is missing or invalid', () => {
+    for (const value of [undefined, 0, -1, 1.5, '123']) {
+      const projectId = readOptionalProjectId({
+        get<T>(key: string): T | undefined {
+          return (key === 'projectId' ? value : undefined) as T | undefined;
+        }
+      });
+
+      expect(projectId).toBeUndefined();
+    }
+  });
+});
 describe('readExtensionConfig', () => {
   it('reads normalized workspace configuration', () => {
     const config = readExtensionConfig({
@@ -123,11 +165,12 @@ describe('CredentialsStore', () => {
     const mem = new InMemorySecrets();
     const store = new CredentialsStore(mem as any);
 
-    await store.storeLogin('alice', 's3cr3t', 'tok-1');
-    const creds = await store.getCredentials();
+    await store.storeLogin('alice', 's3cr3t', 'tok-1', 'https://zentao.example.com/');
+    const creds = await store.getCredentials('https://zentao.example.com/');
     expect(creds.account).toBe('alice');
     expect(creds.password).toBe('s3cr3t');
     expect(creds.token).toBe('tok-1');
+    expect((await store.getCredentials('https://other.example.com/')).token).toBeUndefined();
   });
 
   it('rolls back when a store operation fails', async () => {

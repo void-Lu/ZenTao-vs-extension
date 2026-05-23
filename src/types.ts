@@ -6,6 +6,11 @@ export interface ExtensionConfig {
   requestTimeout: number;
 }
 
+export interface ConnectionConfig {
+  baseUrl: string;
+  requestTimeout: number;
+}
+
 export interface ZenTaoCredentials {
   account?: string;
   password?: string;

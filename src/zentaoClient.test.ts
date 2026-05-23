@@ -78,6 +78,35 @@ describe('ZenTaoClient', () => {
     expect(urls[0]).toBe('https://zentao.example.com/api.php/v1/stories?product=169');
   });
 
+  it('fetches accessible projects with pagination and token header', async () => {
+    const urls: string[] = [];
+    let sentHeaders: Headers | undefined;
+    const client = new ZenTaoClient({
+      baseUrl: 'https://zentao.example.com/',
+      timeoutMs: 5000,
+      getToken: async () => 'abc',
+      setToken: async () => undefined,
+      logger: new RequestLogger({ appendLine() {}, show() {} } as any),
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        urls.push(String(input));
+        sentHeaders = new Headers(init?.headers);
+        if (urls.length === 1) {
+          return jsonResponse({ page: 1, total: 2, limit: 1, projects: [{ id: 1, name: 'Alpha' }] });
+        }
+        return jsonResponse({ page: 1, total: 2, limit: 2, projects: [{ id: 1, name: 'Alpha' }, { id: 2, name: 'Beta' }] });
+      }
+    });
+
+    const data = await client.getProjects();
+
+    expect(data).toEqual({ page: 1, total: 2, limit: 2, projects: [{ id: 1, name: 'Alpha' }, { id: 2, name: 'Beta' }] });
+    expect(urls).toEqual([
+      'https://zentao.example.com/api.php/v1/projects',
+      'https://zentao.example.com/api.php/v1/projects?limit=2'
+    ]);
+    expect(sentHeaders?.get('Token')).toBe('abc');
+  });
+
   it('supports baseUrl that already contains /api.php/v1/', async () => {
     const fetches: string[] = [];
     const client = new (ZenTaoClient as any)({

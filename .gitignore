@@ -5,5 +5,10 @@ dist/
 .vscode-test/
 *.vsix
 resources/test-account-info.txt
-.omc
-.omx
+.omc/*
+!.omc/plans/
+!.omc/specs/
+.omx/*
+!.omx/plans/
+!.omx/specs/
+.claude

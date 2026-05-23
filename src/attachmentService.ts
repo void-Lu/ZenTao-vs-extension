@@ -4,7 +4,7 @@ import { AttachmentViewModel } from './types';
 import { ZenTaoClient } from './zentaoClient';
 
 export class AttachmentService {
-  constructor(private readonly client: ZenTaoClient) {}
+  constructor(private readonly getClient: () => ZenTaoClient) {}
 
   async download(attachment: AttachmentViewModel): Promise<void> {
     const defaultName = attachment.name || `zentao-attachment-${attachment.id ?? Date.now()}`;
@@ -24,7 +24,7 @@ export class AttachmentService {
       return;
     }
 
-    const bytes = await this.client.downloadByPath(requestPath);
+    const bytes = await this.getClient().downloadByPath(requestPath);
     await vscode.workspace.fs.writeFile(target, bytes);
     vscode.window.showInformationMessage(`附件已保存：${path.basename(target.fsPath)}`);
   }
