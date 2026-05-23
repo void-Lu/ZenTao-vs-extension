@@ -6,3 +6,4 @@ dist/
 *.vsix
 resources/test-account-info.txt
 .omc
+.omx
