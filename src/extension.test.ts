@@ -177,7 +177,7 @@ describe('extension scaffold', () => {
 
   test('opens story and task pages in the external browser using classic ZenTao URLs', async () => {
     vi.resetModules();
-    const values = { baseUrl: 'https://zentao.example.com/', projectId: 1, requestTimeout: 5000 };
+    const values = { baseUrl: 'https://zentao.example.com/api.php/v1/', projectId: 1, requestTimeout: 5000 };
     const commands = new Map<string, (...args: unknown[]) => unknown>();
     const openExternal = vi.fn();
     const parse = vi.fn((value: string) => ({ value }));

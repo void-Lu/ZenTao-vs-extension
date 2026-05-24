@@ -23,6 +23,12 @@ function getNodeTarget(node: unknown): { type: ZenTaoItemType; id: number } | un
   return undefined;
 }
 
+function classicPageBaseUrl(baseUrl: string): string {
+  const url = new URL(baseUrl);
+  url.pathname = url.pathname.replace(/\/api\.php\/v1\/?$/i, '/');
+  return url.toString();
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('ZenTao Requests');
   const logger = new RequestLogger(output);
@@ -255,7 +261,7 @@ export function activate(context: vscode.ExtensionContext): void {
     try {
       const { baseUrl } = readConnectionConfig(getWorkspaceConfig());
       const page = target.type === 'story' ? `story-view-${target.id}.html` : `task-view-${target.id}.html`;
-      await vscode.env.openExternal(vscode.Uri.parse(new URL(page, baseUrl).toString()));
+      await vscode.env.openExternal(vscode.Uri.parse(new URL(page, classicPageBaseUrl(baseUrl)).toString()));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       vscode.window.showWarningMessage(message);
