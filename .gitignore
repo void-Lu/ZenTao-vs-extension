@@ -13,3 +13,5 @@ resources/test-account-info.txt
 !.omx/specs/
 .claude
 .vscode
+resources/*
+!.resources/zentao.svg

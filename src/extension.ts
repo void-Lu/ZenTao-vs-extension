@@ -44,10 +44,15 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   function getWritableConfig(): vscode.WorkspaceConfiguration & { getProjectTarget(): vscode.ConfigurationTarget; getGlobalTarget(): vscode.ConfigurationTarget } {
-    const configuration = getWorkspaceConfig() as vscode.WorkspaceConfiguration & { getProjectTarget(): vscode.ConfigurationTarget; getGlobalTarget(): vscode.ConfigurationTarget };
-    configuration.getProjectTarget = getProjectConfigurationTarget;
-    configuration.getGlobalTarget = () => vscode.ConfigurationTarget.Global;
-    return configuration;
+    const configuration = getWorkspaceConfig();
+    return {
+      get: configuration.get.bind(configuration),
+      has: configuration.has?.bind(configuration) ?? ((section: string) => configuration.get(section) !== undefined),
+      inspect: configuration.inspect?.bind(configuration) ?? (() => undefined),
+      update: configuration.update.bind(configuration),
+      getProjectTarget: getProjectConfigurationTarget,
+      getGlobalTarget: () => vscode.ConfigurationTarget.Global
+    } as vscode.WorkspaceConfiguration & { getProjectTarget(): vscode.ConfigurationTarget; getGlobalTarget(): vscode.ConfigurationTarget };
   }
 
   async function confirmBaseUrlMigration(baseUrl: string): Promise<boolean> {

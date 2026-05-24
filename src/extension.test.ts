@@ -618,6 +618,52 @@ describe('extension scaffold', () => {
     ]);
   });
 
+  test('registers commands even when the VS Code configuration object is not extensible', async () => {
+    vi.resetModules();
+    const values = { baseUrl: 'https://zentao.example.com/', projectId: 1, requestTimeout: 5000 };
+    const commands = new Map<string, (...args: unknown[]) => unknown>();
+    const configuration = Object.preventExtensions({
+      get: <T,>(key: string): T | undefined => values[key as keyof typeof values] as T | undefined,
+      inspect: <T,>(key: string): { globalValue?: T } | undefined => key === 'baseUrl' ? { globalValue: values.baseUrl as T } : undefined,
+      update: vi.fn()
+    });
+    vi.doMock('vscode', () => ({
+      window: {
+        createOutputChannel: () => ({ appendLine() {}, show() {} }),
+        createTreeView: () => ({ dispose() {} }),
+        showWarningMessage: vi.fn(),
+        showInformationMessage: vi.fn(),
+        showInputBox: vi.fn(),
+        showQuickPick: vi.fn()
+      },
+      workspace: {
+        workspaceFolders: [{}],
+        getConfiguration: () => configuration
+      },
+      commands: {
+        registerCommand: (name: string, callback: (...args: unknown[]) => unknown) => {
+          commands.set(name, callback);
+          return { dispose() {} };
+        }
+      },
+      EventEmitter: class {
+        event = vi.fn();
+        fire = vi.fn();
+        dispose = vi.fn();
+      },
+      TreeItem: class {
+        constructor(public readonly label: string, public readonly collapsibleState?: unknown) {}
+      },
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      env: { clipboard: { writeText: vi.fn() } },
+      ConfigurationTarget: { Global: 'global', Workspace: 'workspace' }
+    }));
+    const extension = await import('./extension');
+
+    expect(() => extension.activate({ secrets: { get: async (key: string) => key.startsWith('zentao.token') ? 'token-1' : undefined, store: async () => undefined, delete: async () => undefined }, subscriptions: [], extensionUri: {} } as any)).not.toThrow();
+    expect(commands.has('zentao.reconnect')).toBe(true);
+  });
+
   test('recreates the ZenTao client when connection settings change', async () => {
     vi.resetModules();
     const values = { baseUrl: 'https://one.example.com/', projectId: 1, requestTimeout: 5000 };
