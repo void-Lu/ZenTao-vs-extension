@@ -9,8 +9,16 @@ function tokenKey(baseUrl?: string): string {
   return baseUrl ? `${KEY_TOKEN}.${Buffer.from(baseUrl).toString('base64url')}` : KEY_TOKEN;
 }
 
+export interface InspectResultLike<T> {
+  globalValue?: T;
+  workspaceValue?: T;
+  workspaceFolderValue?: T;
+}
+
 export interface WorkspaceConfigurationLike {
   get<T>(key: string): T | undefined;
+  inspect?<T>(key: string): InspectResultLike<T> | undefined;
+  update?(key: string, value: unknown, target: unknown): Thenable<void>;
 }
 
 export interface SecretStorageLike {
@@ -45,10 +53,54 @@ export function normalizeBaseUrl(raw: string): string {
   return url.toString().endsWith('/') ? url.toString() : `${url.toString()}/`;
 }
 
+function readGlobalBaseUrl(configuration: WorkspaceConfigurationLike): string | undefined {
+  const inspected = configuration.inspect?.<string>('baseUrl');
+  if (inspected) {
+    return inspected.globalValue;
+  }
+  return configuration.get<string>('baseUrl');
+}
+
+function readLegacyWorkspaceBaseUrl(configuration: WorkspaceConfigurationLike): string | undefined {
+  const inspected = configuration.inspect?.<string>('baseUrl');
+  return inspected?.workspaceFolderValue ?? inspected?.workspaceValue;
+}
+
 export function readConnectionConfig(configuration: WorkspaceConfigurationLike): ConnectionConfig {
-  const baseUrl = normalizeBaseUrl(configuration.get<string>('baseUrl') ?? '');
+  const baseUrl = normalizeBaseUrl(readGlobalBaseUrl(configuration) ?? '');
   const requestTimeout = configuration.get<number>('requestTimeout') ?? 15000;
   return { baseUrl, requestTimeout };
+}
+
+export async function migrateLegacyBaseUrlToGlobal(
+  configuration: WorkspaceConfigurationLike,
+  globalTarget: unknown,
+  confirmMigration: (baseUrl: string) => Promise<boolean>
+): Promise<string | undefined> {
+  const globalBaseUrl = readGlobalBaseUrl(configuration);
+  if (globalBaseUrl !== undefined && globalBaseUrl.trim() !== '') {
+    normalizeBaseUrl(globalBaseUrl);
+    return undefined;
+  }
+
+  const legacyBaseUrl = readLegacyWorkspaceBaseUrl(configuration);
+  if (legacyBaseUrl === undefined || legacyBaseUrl.trim() === '') {
+    return undefined;
+  }
+
+  let normalizedLegacy: string;
+  try {
+    normalizedLegacy = normalizeBaseUrl(legacyBaseUrl);
+  } catch {
+    return undefined;
+  }
+
+  if (!(await confirmMigration(normalizedLegacy))) {
+    return undefined;
+  }
+
+  await configuration.update?.('baseUrl', normalizedLegacy, globalTarget);
+  return normalizedLegacy;
 }
 
 export function readOptionalProjectId(configuration: WorkspaceConfigurationLike): number | undefined {

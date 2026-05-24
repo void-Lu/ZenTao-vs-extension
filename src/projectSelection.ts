@@ -1,3 +1,5 @@
+import { TreeDataState } from './types';
+
 export interface ProjectQuickPickItem {
   label: string;
   description: string;
@@ -16,7 +18,9 @@ export interface ProjectSelectionClient {
 }
 
 export interface ProjectSelectionConfiguration {
-  update(key: string, value: unknown, target: boolean): Thenable<void>;
+  update(key: string, value: unknown, target: unknown): Thenable<void>;
+  getProjectTarget?(): unknown;
+  getGlobalTarget?(): unknown;
 }
 
 export interface ProjectSelectionWindow {
@@ -31,6 +35,21 @@ export interface EnsureProjectIdOptions {
   client: ProjectSelectionClient;
   configuration: ProjectSelectionConfiguration;
   window: ProjectSelectionWindow;
+}
+
+export type ProjectReselectResult =
+  | { status: 'selected'; projectId: number; data: TreeDataState }
+  | { status: 'cancelled' }
+  | { status: 'unavailable' }
+  | { status: 'empty' }
+  | { status: 'write-failed' }
+  | { status: 'load-failure' };
+
+export interface ReselectProjectOptions {
+  client: ProjectSelectionClient;
+  configuration: ProjectSelectionConfiguration;
+  window: ProjectSelectionWindow;
+  loadProjectData(projectId: number): Promise<TreeDataState>;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -66,6 +85,45 @@ export function parseManualProjectId(value: string | undefined): number | undefi
   return Number.isInteger(projectId) && projectId > 0 ? projectId : undefined;
 }
 
+export async function reselectProject(options: ReselectProjectOptions): Promise<ProjectReselectResult> {
+  let items: ProjectQuickPickItem[];
+  try {
+    items = mapProjectQuickPickItems(await options.client.getProjects());
+  } catch {
+    await options.window.showWarningMessage('无法获取禅道项目列表。');
+    return { status: 'unavailable' };
+  }
+
+  if (items.length === 0) {
+    await options.window.showWarningMessage('没有可选择的禅道项目。');
+    return { status: 'empty' };
+  }
+
+  const selected = await options.window.showQuickPick(items, { ignoreFocusOut: true, placeHolder: '重新选择禅道项目' });
+  if (!selected) {
+    return { status: 'cancelled' };
+  }
+
+  let data: TreeDataState;
+  try {
+    data = await options.loadProjectData(selected.projectId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await options.window.showWarningMessage(message);
+    return { status: 'load-failure' };
+  }
+
+  try {
+    await options.configuration.update('projectId', selected.projectId, options.configuration.getProjectTarget?.() ?? false);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await options.window.showWarningMessage(message);
+    return { status: 'write-failed' };
+  }
+
+  return { status: 'selected', projectId: selected.projectId, data };
+}
+
 export async function ensureProjectId(options: EnsureProjectIdOptions): Promise<number | undefined> {
   if (options.existingProjectId !== undefined && !options.forceSelection) {
     return options.existingProjectId;
@@ -86,7 +144,7 @@ export async function ensureProjectId(options: EnsureProjectIdOptions): Promise<
 
   const selected = await options.window.showQuickPick(items, { ignoreFocusOut: true, placeHolder: '选择禅道项目' });
   if (selected) {
-    await options.configuration.update('projectId', selected.projectId, false);
+    await options.configuration.update('projectId', selected.projectId, options.configuration.getProjectTarget?.() ?? false);
     return selected.projectId;
   }
 

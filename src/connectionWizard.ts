@@ -124,9 +124,9 @@ export async function runConnectionWizard(options: RunConnectionWizardOptions): 
 
       await options.storeLogin(credentials.account, credentials.password, token, baseUrl);
       if (options.mode === 'firstTime') {
-        await options.configuration.update('baseUrl', baseUrl, false);
+        await options.configuration.update('baseUrl', baseUrl, options.configuration.getGlobalTarget?.() ?? true);
       }
-      await options.configuration.update('projectId', stagedProjectId, false);
+      await options.configuration.update('projectId', stagedProjectId, options.configuration.getProjectTarget?.() ?? false);
       return { baseUrl, projectId: stagedProjectId };
     }
   }

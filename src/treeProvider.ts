@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { transformTreeData, TreeSortMode } from './treeTransform';
 import { ProjectInfo, StoryListItem, TaskListItem, TreeDataState } from './types';
 
 export type ZenTaoTreeNode =
@@ -14,10 +15,26 @@ export class ZenTaoTreeProvider implements vscode.TreeDataProvider<ZenTaoTreeNod
   readonly onDidChangeTreeData = this.changed.event;
 
   private state: TreeDataState = { stories: [], tasks: [], partialTaskFailure: false, message: '未加载禅道数据' };
+  private sortMode: TreeSortMode = 'statusThenPriority';
+  private filterText = '';
 
   setState(state: TreeDataState): void {
     this.state = state;
     this.changed.fire(undefined);
+  }
+
+  setTreeSortMode(sortMode: TreeSortMode): void {
+    this.sortMode = sortMode;
+    this.changed.fire(undefined);
+  }
+
+  setTreeFilter(filterText: string): void {
+    this.filterText = filterText;
+    this.changed.fire(undefined);
+  }
+
+  clearTreeFilter(): void {
+    this.setTreeFilter('');
   }
 
   getTreeItem(element: ZenTaoTreeNode): vscode.TreeItem {
@@ -60,17 +77,19 @@ export class ZenTaoTreeProvider implements vscode.TreeDataProvider<ZenTaoTreeNod
   }
 
   getChildren(element?: ZenTaoTreeNode): vscode.ProviderResult<ZenTaoTreeNode[]> {
+    const visibleState = transformTreeData(this.state, { sortMode: this.sortMode, filterText: this.filterText });
+
     if (!element) {
-      if (!this.state.project) {
-        return [{ kind: 'message', label: this.state.message ?? '未配置禅道项目' }];
+      if (!visibleState.project) {
+        return [{ kind: 'message', label: visibleState.message ?? '未配置禅道项目' }];
       }
-      return [{ kind: 'project', project: this.state.project }];
+      return [{ kind: 'project', project: visibleState.project }];
     }
 
     if (element.kind === 'project') {
       return [
-        { kind: 'storyGroup', stories: this.state.stories },
-        { kind: 'taskGroup', tasks: this.state.tasks, partialFailure: this.state.partialTaskFailure }
+        { kind: 'storyGroup', stories: visibleState.stories },
+        { kind: 'taskGroup', tasks: visibleState.tasks, partialFailure: visibleState.partialTaskFailure }
       ];
     }
 

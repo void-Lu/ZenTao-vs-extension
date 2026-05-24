@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runConnectionWizard } from './connectionWizard';
 
-function configuration() {
-  const updates: Array<{ key: string; value: unknown; target: boolean }> = [];
+function configuration(projectTarget: unknown = false) {
+  const updates: Array<{ key: string; value: unknown; target: unknown }> = [];
   return {
     updates,
     config: {
-      update: async (key: string, value: unknown, target: boolean) => {
+      getProjectTarget: () => projectTarget,
+      update: async (key: string, value: unknown, target: unknown) => {
         updates.push({ key, value, target });
       }
     }
@@ -45,7 +46,7 @@ describe('runConnectionWizard', () => {
     expect(client.login).toHaveBeenCalledWith('alice', 'secret');
     expect(storeLogin).toHaveBeenCalledWith('alice', 'secret', 'token-1', 'https://zentao.example.com/');
     expect(cfg.updates).toEqual([
-      { key: 'baseUrl', value: 'https://zentao.example.com/', target: false },
+      { key: 'baseUrl', value: 'https://zentao.example.com/', target: true },
       { key: 'projectId', value: 7, target: false }
     ]);
   });
@@ -69,7 +70,7 @@ describe('runConnectionWizard', () => {
     });
 
     expect(window.showWarningMessage).toHaveBeenCalledWith('ZenTao URL must not include credentials.');
-    expect(cfg.updates[0]).toEqual({ key: 'baseUrl', value: 'https://zentao.example.com/', target: false });
+    expect(cfg.updates[0]).toEqual({ key: 'baseUrl', value: 'https://zentao.example.com/', target: true });
   });
 
   it('stops without writes when a first-time prompt is cancelled', async () => {
@@ -90,6 +91,27 @@ describe('runConnectionWizard', () => {
     expect(createClient).not.toHaveBeenCalled();
     expect(storeLogin).not.toHaveBeenCalled();
     expect(cfg.updates).toEqual([]);
+  });
+
+  it('writes project ID to the target selected by the configuration adapter', async () => {
+    const cfg = configuration('workspace');
+    const window = windowWithInputs(['https://zentao.example.com', 'alice', 'secret'], [
+      { label: 'Alpha', description: '#7', projectId: 7 }
+    ]);
+    const client = {
+      login: vi.fn(async () => 'token-1'),
+      getProjects: vi.fn(async () => ({ projects: [{ id: 7, name: 'Alpha' }] }))
+    };
+
+    await runConnectionWizard({
+      mode: 'firstTime',
+      window,
+      configuration: cfg.config,
+      createClient: vi.fn(() => client),
+      storeLogin: vi.fn(async () => undefined)
+    });
+
+    expect(cfg.updates).toContainEqual({ key: 'projectId', value: 7, target: 'workspace' });
   });
 
   it('restarts first-time setup from URL when the project list is unavailable', async () => {

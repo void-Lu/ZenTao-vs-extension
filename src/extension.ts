@@ -1,13 +1,15 @@
 import * as vscode from 'vscode';
 import { AttachmentService } from './attachmentService';
-import { CredentialsStore, readConnectionConfig, readOptionalProjectId } from './configuration';
+import { CredentialsStore, migrateLegacyBaseUrlToGlobal, readConnectionConfig, readOptionalProjectId } from './configuration';
 import { runConnectionWizard } from './connectionWizard';
+import { reselectProject } from './projectSelection';
 import { DetailPanel } from './detailPanel';
 import { toDetailViewModel } from './detailMapper';
 import { loadProjectData } from './loadProjectData';
 import { RequestLogger } from './requestLogger';
 import { ZenTaoClient } from './zentaoClient';
 import { ZenTaoTreeNode, ZenTaoTreeProvider } from './treeProvider';
+import { TreeSortMode } from './treeTransform';
 import { ZenTaoItemType } from './types';
 
 function getNodeTarget(node: unknown): { type: ZenTaoItemType; id: number } | undefined {
@@ -36,6 +38,32 @@ export function activate(context: vscode.ExtensionContext): void {
   function getWorkspaceConfig(): vscode.WorkspaceConfiguration {
     return vscode.workspace.getConfiguration('zentao');
   }
+
+  function getProjectConfigurationTarget(): vscode.ConfigurationTarget {
+    return vscode.workspace.workspaceFolders?.length ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+  }
+
+  function getWritableConfig(): vscode.WorkspaceConfiguration & { getProjectTarget(): vscode.ConfigurationTarget; getGlobalTarget(): vscode.ConfigurationTarget } {
+    const configuration = getWorkspaceConfig() as vscode.WorkspaceConfiguration & { getProjectTarget(): vscode.ConfigurationTarget; getGlobalTarget(): vscode.ConfigurationTarget };
+    configuration.getProjectTarget = getProjectConfigurationTarget;
+    configuration.getGlobalTarget = () => vscode.ConfigurationTarget.Global;
+    return configuration;
+  }
+
+  async function confirmBaseUrlMigration(baseUrl: string): Promise<boolean> {
+    const confirm = '迁移到用户配置';
+    const selected = await vscode.window.showWarningMessage(
+      `检测到当前工作区配置了 ZenTao URL：${baseUrl}。是否将它迁移为用户级配置？`,
+      { modal: true },
+      confirm
+    );
+    return selected === confirm;
+  }
+
+  const initializeConfiguration = migrateLegacyBaseUrlToGlobal(getWritableConfig(), vscode.ConfigurationTarget.Global, confirmBaseUrlMigration).catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    vscode.window.showWarningMessage(message);
+  });
 
   function createClient(baseUrl: string, requestTimeout = readConnectionConfig(getWorkspaceConfig()).requestTimeout): ZenTaoClient {
     return new ZenTaoClient({
@@ -77,7 +105,7 @@ export function activate(context: vscode.ExtensionContext): void {
       mode: 'firstTime',
       currentBaseUrl,
       window: vscode.window,
-      configuration: getWorkspaceConfig(),
+      configuration: getWritableConfig(),
       createClient: (baseUrl) => createWizardClient(baseUrl),
       storeLogin: (account, password, token, baseUrl) => credentials.storeLogin(account, password, token, baseUrl)
     });
@@ -117,6 +145,7 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   async function refresh(): Promise<void> {
+    await initializeConfiguration;
     try {
       const projectId = await resolveProjectId();
       if (projectId === undefined) {
@@ -133,6 +162,7 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   async function reconnect(): Promise<void> {
+    await initializeConfiguration;
     treeProvider.setState({ stories: [], tasks: [], partialTaskFailure: false, message: '正在重新连接禅道...' });
     detailPanel?.close();
     detailPanel = undefined;
@@ -156,7 +186,7 @@ export function activate(context: vscode.ExtensionContext): void {
       existingProjectId: readOptionalProjectId(getWorkspaceConfig()),
       previousAccount: previous.account,
       window: vscode.window,
-      configuration: getWorkspaceConfig(),
+      configuration: getWritableConfig(),
       createClient: (baseUrl) => createWizardClient(baseUrl, config.requestTimeout),
       storeLogin: (account, password, token, baseUrl) => credentials.storeLogin(account, password, token, baseUrl)
     });
@@ -169,6 +199,7 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   async function openDetail(typeOrNode: ZenTaoItemType | unknown, id?: number): Promise<void> {
+    await initializeConfiguration;
     const target = typeof typeOrNode === 'string' && typeof id === 'number'
       ? { type: typeOrNode as ZenTaoItemType, id }
       : getNodeTarget(typeOrNode);
@@ -186,11 +217,56 @@ export function activate(context: vscode.ExtensionContext): void {
     detailPanel.show(detail);
   }
 
+  async function setTreeFilter(): Promise<void> {
+    const value = await vscode.window.showInputBox({
+      prompt: '输入 ID/标题/名称筛选关键词，多个关键词以空格分隔',
+      ignoreFocusOut: true
+    });
+    if (value === undefined) {
+      return;
+    }
+    treeProvider.setTreeFilter(value);
+  }
+
+  async function setTreeSort(): Promise<void> {
+    const selected = await vscode.window.showQuickPick([
+      { label: '状态优先，其次优先级', mode: 'statusThenPriority' as TreeSortMode },
+      { label: '优先级优先，其次状态', mode: 'priorityThenStatus' as TreeSortMode },
+      { label: '原始顺序', mode: 'sourceOrder' as TreeSortMode }
+    ], { ignoreFocusOut: true, placeHolder: '选择禅道树排序方式' });
+    if (selected) {
+      treeProvider.setTreeSortMode(selected.mode);
+    }
+  }
+
+  async function reselectCurrentProject(): Promise<void> {
+    await initializeConfiguration;
+    const result = await reselectProject({
+      client: getClient(),
+      configuration: getWritableConfig(),
+      window: vscode.window,
+      loadProjectData: (projectId) => loadProjectData(getClient(), projectId)
+    });
+
+    if (result.status !== 'selected') {
+      return;
+    }
+
+    treeProvider.setState(result.data);
+    detailPanel?.close();
+    detailPanel = undefined;
+    currentDetailTarget = undefined;
+  }
+
   context.subscriptions.push(
     output,
     treeView,
     vscode.commands.registerCommand('zentao.reconnect', reconnect),
     vscode.commands.registerCommand('zentao.refresh', refresh),
+    vscode.commands.registerCommand('zentao.reselectProject', reselectCurrentProject),
+    vscode.commands.registerCommand('zentao.setTreeFilter', setTreeFilter),
+    vscode.commands.registerCommand('zentao.clearTreeFilter', () => treeProvider.clearTreeFilter()),
+    vscode.commands.registerCommand('zentao.setTreeSort', setTreeSort),
     vscode.commands.registerCommand('zentao.openRequestLog', () => logger.show()),
     vscode.commands.registerCommand('zentao.openDetail', openDetail),
     vscode.commands.registerCommand('zentao.copyId', async (node: unknown) => {

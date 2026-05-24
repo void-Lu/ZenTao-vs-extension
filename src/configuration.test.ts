@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { normalizeBaseUrl, readConnectionConfig, readExtensionConfig, readOptionalProjectId, CredentialsStore, KEY_ACCOUNT, KEY_PASSWORD, KEY_TOKEN } from './configuration';
+import { describe, expect, it, vi } from 'vitest';
+import { migrateLegacyBaseUrlToGlobal, normalizeBaseUrl, readConnectionConfig, readExtensionConfig, readOptionalProjectId, CredentialsStore, KEY_ACCOUNT, KEY_PASSWORD, KEY_TOKEN } from './configuration';
 
 class InMemorySecrets {
   private storage = new Map<string, string>();
@@ -38,14 +38,16 @@ describe('normalizeBaseUrl', () => {
 });
 
 describe('readConnectionConfig', () => {
-  it('reads base URL and timeout without requiring a project ID', () => {
+  it('reads global base URL and timeout without requiring a project ID', () => {
     const config = readConnectionConfig({
       get<T>(key: string): T | undefined {
         const values: Record<string, unknown> = {
-          baseUrl: 'http://127.0.0.1/zentao',
           requestTimeout: 7000
         };
         return values[key] as T | undefined;
+      },
+      inspect<T>(key: string): { globalValue?: T } | undefined {
+        return key === 'baseUrl' ? { globalValue: 'http://127.0.0.1/zentao' as T } : undefined;
       }
     });
 
@@ -53,6 +55,101 @@ describe('readConnectionConfig', () => {
       baseUrl: 'http://127.0.0.1/zentao/',
       requestTimeout: 7000
     });
+  });
+
+  it('does not fall back to workspace baseUrl when global baseUrl is invalid', () => {
+    expect(() => readConnectionConfig({
+      get<T>(key: string): T | undefined {
+        return (key === 'requestTimeout' ? 7000 : undefined) as T | undefined;
+      },
+      inspect<T>(key: string): { globalValue?: T; workspaceValue?: T } | undefined {
+        return key === 'baseUrl'
+          ? { globalValue: 'not-a-url' as T, workspaceValue: 'https://workspace.example.com' as T }
+          : undefined;
+      }
+    })).toThrow('ZenTao URL must be a valid URL.');
+  });
+
+  it('does not read workspace baseUrl as canonical when global baseUrl is missing', () => {
+    expect(() => readConnectionConfig({
+      get<T>(key: string): T | undefined {
+        return (key === 'requestTimeout' ? 7000 : undefined) as T | undefined;
+      },
+      inspect<T>(key: string): { workspaceValue?: T } | undefined {
+        return key === 'baseUrl' ? { workspaceValue: 'https://workspace.example.com' as T } : undefined;
+      }
+    })).toThrow('ZenTao URL is required.');
+  });
+});
+
+describe('migrateLegacyBaseUrlToGlobal', () => {
+  it('migrates a valid workspace baseUrl to global when global is missing', async () => {
+    const updates: Array<{ key: string; value: unknown; target: unknown }> = [];
+    const configuration = {
+      get<T>(): T | undefined {
+        return undefined;
+      },
+      inspect<T>(key: string): { globalValue?: T; workspaceValue?: T } | undefined {
+        return key === 'baseUrl' ? { workspaceValue: 'https://workspace.example.com' as T } : undefined;
+      },
+      update: vi.fn(async (key: string, value: unknown, target: unknown) => {
+        updates.push({ key, value, target });
+      })
+    };
+
+    const confirmMigration = vi.fn(async () => true);
+    const migrated = await migrateLegacyBaseUrlToGlobal(configuration, 'global', confirmMigration);
+
+    expect(confirmMigration).toHaveBeenCalledWith('https://workspace.example.com/');
+    expect(migrated).toBe('https://workspace.example.com/');
+    expect(updates).toEqual([{ key: 'baseUrl', value: 'https://workspace.example.com/', target: 'global' }]);
+  });
+
+  it('does not migrate valid workspace baseUrl when migration is not confirmed', async () => {
+    const configuration = {
+      get<T>(): T | undefined {
+        return undefined;
+      },
+      inspect<T>(key: string): { workspaceValue?: T } | undefined {
+        return key === 'baseUrl' ? { workspaceValue: 'https://workspace.example.com' as T } : undefined;
+      },
+      update: vi.fn()
+    };
+
+    await expect(migrateLegacyBaseUrlToGlobal(configuration, 'global', vi.fn(async () => false))).resolves.toBeUndefined();
+    expect(configuration.update).not.toHaveBeenCalled();
+  });
+
+  it('does not migrate invalid workspace baseUrl values', async () => {
+    const configuration = {
+      get<T>(): T | undefined {
+        return undefined;
+      },
+      inspect<T>(key: string): { workspaceValue?: T } | undefined {
+        return key === 'baseUrl' ? { workspaceValue: 'file:///tmp/zentao' as T } : undefined;
+      },
+      update: vi.fn()
+    };
+
+    await expect(migrateLegacyBaseUrlToGlobal(configuration, 'global', vi.fn(async () => true))).resolves.toBeUndefined();
+    expect(configuration.update).not.toHaveBeenCalled();
+  });
+
+  it('keeps valid global baseUrl authoritative and does not migrate workspace values', async () => {
+    const configuration = {
+      get<T>(): T | undefined {
+        return undefined;
+      },
+      inspect<T>(key: string): { globalValue?: T; workspaceValue?: T } | undefined {
+        return key === 'baseUrl'
+          ? { globalValue: 'https://global.example.com' as T, workspaceValue: 'https://workspace.example.com' as T }
+          : undefined;
+      },
+      update: vi.fn()
+    };
+
+    await expect(migrateLegacyBaseUrlToGlobal(configuration, 'global', vi.fn(async () => true))).resolves.toBeUndefined();
+    expect(configuration.update).not.toHaveBeenCalled();
   });
 });
 

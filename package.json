@@ -16,11 +16,13 @@
         "zentao.baseUrl": {
           "type": "string",
           "default": "",
+          "scope": "application",
           "description": "ZenTao base URL, for example https://zentao.example.com/."
         },
         "zentao.projectId": {
           "type": "number",
           "default": 0,
+          "scope": "window",
           "description": "ZenTao project ID used by this workspace."
         },
         "zentao.requestTimeout": {
@@ -60,6 +62,26 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "zentao.reselectProject",
+        "title": "重新选择项目",
+        "icon": "$(list-selection)"
+      },
+      {
+        "command": "zentao.setTreeFilter",
+        "title": "筛选禅道条目",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "zentao.clearTreeFilter",
+        "title": "清除禅道筛选",
+        "icon": "$(filter-filled)"
+      },
+      {
+        "command": "zentao.setTreeSort",
+        "title": "排序禅道条目",
+        "icon": "$(sort-precedence)"
+      },
+      {
         "command": "zentao.openRequestLog",
         "title": "请求日志",
         "icon": "$(output)"
@@ -85,14 +107,34 @@
           "group": "navigation@1"
         },
         {
-          "command": "zentao.openRequestLog",
+          "command": "zentao.reselectProject",
           "when": "view == zentaoProjectView",
           "group": "navigation@2"
         },
         {
-          "command": "zentao.refresh",
+          "command": "zentao.setTreeFilter",
           "when": "view == zentaoProjectView",
           "group": "navigation@3"
+        },
+        {
+          "command": "zentao.clearTreeFilter",
+          "when": "view == zentaoProjectView",
+          "group": "navigation@4"
+        },
+        {
+          "command": "zentao.setTreeSort",
+          "when": "view == zentaoProjectView",
+          "group": "navigation@5"
+        },
+        {
+          "command": "zentao.openRequestLog",
+          "when": "view == zentaoProjectView",
+          "group": "navigation@6"
+        },
+        {
+          "command": "zentao.refresh",
+          "when": "view == zentaoProjectView",
+          "group": "navigation@7"
         }
       ],
       "view/item/context": [
