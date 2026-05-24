@@ -11,12 +11,13 @@ describe('sanitizeRichHtml', () => {
     expect(clean).not.toContain('onclick');
   });
 
-  it('removes remote images from rich text to avoid automatic outbound requests', () => {
+  it('keeps remote images in rich text when they use safe HTTP(S) sources', () => {
     const clean = sanitizeRichHtml('<p>ok</p><img src="https://example.com/track.png" alt="tracking">');
 
     expect(clean).toContain('<p>ok</p>');
-    expect(clean).not.toContain('<img');
-    expect(clean).not.toContain('track.png');
+    expect(clean).toContain('<img');
+    expect(clean).toContain('https://example.com/track.png');
+    expect(clean).toContain('alt="tracking"');
   });
 });
 
@@ -54,7 +55,7 @@ describe('toDetailViewModel', () => {
 
     expect(model.basicFieldGroups.map((group) => group.fields.map((field) => field.label))).toEqual([
       ['由谁创建', '指派给', '评审人员', '评审时间', '由谁关闭', '关闭原因', '最后修改'],
-      ['所属模块', '所属计划', '来源', '来源备注', '当前状态', '所处阶段', '类别', '优先级', '预计工时', '关键词', '抄送给']
+      ['当前状态', '所处阶段', '类别', '优先级', '预计工时', '关键词', '抄送给']
     ]);
     expect(model.basicFieldGroups[0].fields.find((field) => field.label === '由谁关闭')?.value).toBe('暂无');
     expect(model.contentSections.map((section) => section.title)).toEqual(['需求描述', '验收标准']);
@@ -70,8 +71,13 @@ describe('toDetailViewModel', () => {
       executionName: 'PJ4258 广州汇登',
       moduleName: '',
       storyTitle: '供应商付款单功能设计',
-      assignedTo: 'neil.tang gino.lu will.liu',
-      mode: '多人并行',
+      assignedTo: 'stale.assignee',
+      mode: 'multi',
+      team: [
+        { realname: 'Neil Tang' },
+        { account: 'gino.lu' },
+        { name: 'Will Liu' }
+      ],
       type: '开发',
       status: '进行中',
       progress: '17%',
@@ -96,8 +102,8 @@ describe('toDetailViewModel', () => {
       storySpec: '<p>需求详情<script>alert(1)</script></p>',
       storyVerify: '',
       actions: [
-        { date: '2025-12-22 18:10:22', actor: 'amy.sun', action: '创建', comment: '', desc: '' },
-        { date: '2025-12-26 11:08:34', actor: 'amy.sun', action: '添加备注', comment: '<p>字段变更</p>', history: '<script>x()</script>' }
+        { date: '2025-12-22 18:10:22', actor: 'amy.sun', action: '创建', comment: '<p>不要显示备注</p>', desc: '<p>只显示描述</p>' },
+        { date: '2025-12-26 11:08:34', actor: 'amy.sun', action: '添加备注', comment: '<p>不要显示字段变更</p>', desc: '<script>x()</script><p>字段变更描述</p>' }
       ]
     });
 
@@ -107,12 +113,15 @@ describe('toDetailViewModel', () => {
       ['由谁创建', '由谁完成', '由谁取消', '由谁关闭', '关闭原因', '最后编辑']
     ]);
     expect(model.basicFieldGroups[0].fields.find((field) => field.label === '所属模块')?.value).toBe('暂无');
+    expect(model.basicFieldGroups[0].fields.find((field) => field.label === '指派给')?.value).toBe('Neil Tang, gino.lu, Will Liu');
     expect(model.contentSections.map((section) => section.title)).toEqual(['任务描述', '研发需求描述', '验收标准']);
     expect(model.contentSections[0].html).toBe('暂无');
     expect(model.contentSections[1].html).toContain('<p>需求详情</p>');
     expect(model.contentSections[1].html).not.toContain('script');
     expect(model.activities).toHaveLength(2);
-    expect(model.activities[1].contentHtml).toContain('<p>字段变更</p>');
+    expect(model.activities[0].contentHtml).toContain('<p>只显示描述</p>');
+    expect(model.activities[0].contentHtml).not.toContain('不要显示备注');
+    expect(model.activities[1].contentHtml).toContain('<p>字段变更描述</p>');
     expect(model.activities[1].contentHtml).not.toContain('script');
   });
 });

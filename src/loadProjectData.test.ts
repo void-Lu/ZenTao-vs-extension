@@ -7,17 +7,40 @@ describe('loadProjectData', () => {
     const client = {
       getProject: async () => ({ id: 123, name: '企业管理系统', products: [169] }),
       getProjectStories: async () => { throw new Error('project story endpoint should not be used'); },
-      getProductStories: async (productId: number) => ({ stories: [{ id: 101, title: `登录优化-${productId}`, pri: 1, status: 'active' }] }),
+      getProductStories: async (productId: number) => ({ stories: [{ id: 101, title: `登录优化-${productId}`, pri: 1, status: 'active', assignedToRealName: 'Amy Sun' }] }),
       getProjectExecutions: async () => ({ executions: [{ id: 201, name: '一期', products: [169] }] }),
-      getExecutionTasks: async () => ({ tasks: [{ id: 301, name: '前端页面', pri: 2, status: 'doing' }] })
+      getExecutionTasks: async () => ({ tasks: [{ id: 301, name: '前端页面', pri: 2, status: 'doing', assignedTo: 'gino.lu' }] })
     } as unknown as ZenTaoClient;
 
     const state = await loadProjectData(client, 123);
 
     expect(state.project?.name).toBe('企业管理系统');
-    expect(state.stories).toMatchObject([{ id: 101, title: '登录优化-169', priority: 'P1', status: 'active' }]);
-    expect(state.tasks).toMatchObject([{ id: 301, name: '前端页面', priority: 'P2', status: 'doing', executionId: 201 }]);
+    expect(state.stories).toMatchObject([{ id: 101, title: '登录优化-169', priority: 'P1', status: 'active', assignedTo: 'Amy Sun' }]);
+    expect(state.tasks).toMatchObject([{ id: 301, name: '前端页面', priority: 'P2', status: 'doing', executionId: 201, assignedTo: 'gino.lu' }]);
     expect(state.partialTaskFailure).toBe(false);
+  });
+
+  it('maps multi-person task team members into assignee text for tree filtering', async () => {
+    const client = {
+      getProject: async () => ({ id: 123, name: '企业管理系统', products: [169] }),
+      getProductStories: async () => ({ stories: [] }),
+      getProjectExecutions: async () => ({ executions: [{ id: 201, name: '一期', products: [169] }] }),
+      getExecutionTasks: async () => ({
+        tasks: [{
+          id: 301,
+          name: '多人任务',
+          pri: 2,
+          status: 'doing',
+          mode: 'multi',
+          assignedTo: 'stale.assignee',
+          team: [{ realname: 'Neil Tang' }, { account: 'gino.lu' }, { name: 'Will Liu' }]
+        }]
+      })
+    } as unknown as ZenTaoClient;
+
+    const state = await loadProjectData(client, 123);
+
+    expect(state.tasks).toMatchObject([{ id: 301, assignedTo: 'Neil Tang, gino.lu, Will Liu' }]);
   });
 
   it('falls back when project detail is denied and derives product stories from executions', async () => {

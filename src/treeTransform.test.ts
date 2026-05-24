@@ -100,6 +100,23 @@ describe('transformTreeData', () => {
     expect(transformed.tasks.map((task) => task.id)).toEqual([10]);
   });
 
+  it('filters stories and tasks by assignee', () => {
+    const transformed = transformTreeData({
+      ...state(),
+      stories: [
+        { id: 1, title: 'Mine story', priority: 'P1', status: 'active', assignedTo: 'amy.sun', raw: {} } as any,
+        { id: 2, title: 'Other story', priority: 'P1', status: 'active', assignedTo: 'bob.li', raw: {} } as any
+      ],
+      tasks: [
+        { id: 10, name: 'Mine task', priority: 'P1', status: 'doing', assignedTo: 'Amy Sun', raw: {} } as any,
+        { id: 20, name: 'Other task', priority: 'P1', status: 'doing', assignedTo: 'bob.li', raw: {} } as any
+      ]
+    }, { sortMode: 'sourceOrder', filterText: 'amy' });
+
+    expect(transformed.stories.map((story) => story.id)).toEqual([1]);
+    expect(transformed.tasks.map((task) => task.id)).toEqual([10]);
+  });
+
   it('filters by case-insensitive subsequence', () => {
     const transformed = transformTreeData(state(), { sortMode: 'sourceOrder', filterText: 'ctv' });
 

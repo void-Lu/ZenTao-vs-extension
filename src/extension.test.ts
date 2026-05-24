@@ -166,13 +166,65 @@ describe('extension scaffold', () => {
     await commands.get('zentao.setTreeSort')?.();
     await commands.get('zentao.clearTreeFilter')?.();
 
-    expect(showInputBox).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining('ID/标题/名称') }));
+    expect(showInputBox).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining('ID/标题/名称/指派给') }));
     expect(showQuickPick).toHaveBeenCalledWith(expect.not.arrayContaining([
       expect.objectContaining({ label: expect.stringContaining('标题') }),
       expect.objectContaining({ label: expect.stringContaining('ID') })
     ]), expect.anything());
     expect(vi.mocked(loadProjectData).mock.calls.length).toBe(initialLoadCount);
     expect(providers[0]).toBeDefined();
+  });
+
+  test('opens story and task pages in the external browser using classic ZenTao URLs', async () => {
+    vi.resetModules();
+    const values = { baseUrl: 'https://zentao.example.com/', projectId: 1, requestTimeout: 5000 };
+    const commands = new Map<string, (...args: unknown[]) => unknown>();
+    const openExternal = vi.fn();
+    const parse = vi.fn((value: string) => ({ value }));
+    vi.doMock('vscode', () => ({
+      window: {
+        createOutputChannel: () => ({ appendLine() {}, show() {} }),
+        createTreeView: () => ({ dispose() {} }),
+        showWarningMessage: vi.fn(),
+        showInformationMessage: vi.fn(),
+        showInputBox: vi.fn(),
+        showQuickPick: vi.fn()
+      },
+      workspace: {
+        getConfiguration: () => ({
+          get: <T,>(key: string): T | undefined => values[key as keyof typeof values] as T | undefined,
+          update: vi.fn()
+        })
+      },
+      commands: {
+        registerCommand: (name: string, callback: (...args: unknown[]) => unknown) => {
+          commands.set(name, callback);
+          return { dispose() {} };
+        }
+      },
+      EventEmitter: class {
+        event = vi.fn();
+        fire = vi.fn();
+        dispose = vi.fn();
+      },
+      TreeItem: class {
+        constructor(public readonly label: string, public readonly collapsibleState?: unknown) {}
+      },
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      env: { clipboard: { writeText: vi.fn() }, openExternal },
+      Uri: { parse },
+      ConfigurationTarget: { Global: true, Workspace: false }
+    }));
+    const extension = await import('./extension');
+
+    extension.activate({ secrets: { get: async (key: string) => key.startsWith('zentao.token') ? 'token-1' : undefined, store: async () => undefined, delete: async () => undefined }, subscriptions: [], extensionUri: {} } as any);
+    await commands.get('zentao.openExternal')?.({ kind: 'story', story: { id: 101 } });
+    await commands.get('zentao.openExternal')?.({ kind: 'task', task: { id: 202 } });
+
+    expect(parse).toHaveBeenCalledWith('https://zentao.example.com/story-view-101.html');
+    expect(parse).toHaveBeenCalledWith('https://zentao.example.com/task-view-202.html');
+    expect(openExternal).toHaveBeenCalledWith({ value: 'https://zentao.example.com/story-view-101.html' });
+    expect(openExternal).toHaveBeenCalledWith({ value: 'https://zentao.example.com/task-view-202.html' });
   });
 
   test('uses explicit configuration targets for first-time setup writes', async () => {

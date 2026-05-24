@@ -19,14 +19,19 @@ export function sanitizeRichHtml(value: unknown): string {
       'p', 'br', 'div', 'span', 'strong', 'b', 'em', 'i', 'u', 's',
       'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
       'table', 'thead', 'tbody', 'tr', 'th', 'td',
-      'a', 'hr', 'h1', 'h2', 'h3', 'h4'
+      'a', 'img', 'hr', 'h1', 'h2', 'h3', 'h4'
     ],
     allowedAttributes: {
       a: ['href', 'title', 'target', 'rel'],
+      img: ['src', 'alt', 'title', 'width', 'height'],
       th: ['colspan', 'rowspan'],
       td: ['colspan', 'rowspan']
     },
     allowedSchemes: ['http', 'https', 'mailto'],
+    allowedSchemesByTag: {
+      a: ['http', 'https', 'mailto'],
+      img: ['http', 'https']
+    },
     allowProtocolRelative: false,
     disallowedTagsMode: 'discard'
   });
@@ -64,7 +69,6 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
   const activities = detail.activities.length
     ? `<ol class="activity-list">${detail.activities.map((activity) => `
       <li>
-        <div class="activity-meta">${escapeHtml(activity.date)}，由 ${escapeHtml(activity.actor)} ${escapeHtml(activity.action)}。</div>
         <div class="rich-content">${activity.contentHtml || '暂无'}</div>
       </li>`).join('')}</ol>`
     : '<p>暂无历史记录</p>';
@@ -73,7 +77,7 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${cspSource}; style-src 'unsafe-inline' ${cspSource}; script-src 'nonce-${nonce}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${cspSource} https: http:; style-src 'unsafe-inline' ${cspSource}; script-src 'nonce-${nonce}';">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(detail.title)}</title>
   <style>
@@ -90,9 +94,9 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
     li { margin: 8px 0; }
     a { color: var(--vscode-textLink-foreground); cursor: pointer; }
     pre { overflow: auto; padding: 8px; border: 1px solid var(--vscode-panel-border); }
-    .activity-meta { opacity: 0.75; font-size: 12px; margin-bottom: 2px; }
     .rich-content table { border-collapse: collapse; }
     .rich-content th, .rich-content td { border: 1px solid var(--vscode-panel-border); padding: 4px 6px; }
+    .rich-content img { max-width: 100%; }
   </style>
 </head>
 <body>

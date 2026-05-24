@@ -224,7 +224,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   async function setTreeFilter(): Promise<void> {
     const value = await vscode.window.showInputBox({
-      prompt: '输入 ID/标题/名称筛选关键词，多个关键词以空格分隔',
+      prompt: '输入 ID/标题/名称/指派给筛选关键词，多个关键词以空格分隔',
       ignoreFocusOut: true
     });
     if (value === undefined) {
@@ -241,6 +241,24 @@ export function activate(context: vscode.ExtensionContext): void {
     ], { ignoreFocusOut: true, placeHolder: '选择禅道树排序方式' });
     if (selected) {
       treeProvider.setTreeSortMode(selected.mode);
+    }
+  }
+
+  async function openExternal(node: unknown): Promise<void> {
+    await initializeConfiguration;
+    const target = getNodeTarget(node);
+    if (!target) {
+      vscode.window.showWarningMessage('无法识别要打开的禅道条目。');
+      return;
+    }
+
+    try {
+      const { baseUrl } = readConnectionConfig(getWorkspaceConfig());
+      const page = target.type === 'story' ? `story-view-${target.id}.html` : `task-view-${target.id}.html`;
+      await vscode.env.openExternal(vscode.Uri.parse(new URL(page, baseUrl).toString()));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      vscode.window.showWarningMessage(message);
     }
   }
 
@@ -280,9 +298,7 @@ export function activate(context: vscode.ExtensionContext): void {
         await vscode.env.clipboard.writeText(String(target.id));
       }
     }),
-    vscode.commands.registerCommand('zentao.openExternal', async () => {
-      vscode.window.showInformationMessage('浏览器打开功能将在详情 URL 映射确认后启用。');
-    })
+    vscode.commands.registerCommand('zentao.openExternal', openExternal)
   );
 
   void refresh();

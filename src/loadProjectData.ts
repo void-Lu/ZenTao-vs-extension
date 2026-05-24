@@ -23,7 +23,31 @@ function stringValue(value: unknown, fallback = ''): string {
   if (value === null || value === undefined || value === '') {
     return fallback;
   }
+  if (typeof value === 'object') {
+    const record = asRecord(value);
+    return stringValue(record.realname ?? record.name ?? record.account ?? record.id, fallback);
+  }
   return String(value);
+}
+
+function asValueArray(value: unknown): unknown[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (value && typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>);
+  }
+  return [];
+}
+
+function assignedTo(raw: AnyRecord): string {
+  if (stringValue(raw.mode).toLowerCase() === 'multi') {
+    const members = asValueArray(raw.team).map((member) => stringValue(member)).filter(Boolean);
+    if (members.length > 0) {
+      return members.join(', ');
+    }
+  }
+  return stringValue(raw.assignedToRealName ?? raw.assignedTo);
 }
 
 function priority(value: unknown): string {
@@ -83,6 +107,7 @@ function mapStories(storiesRaw: unknown[]): StoryListItem[] {
       title: stringValue(story.title, `需求 #${story.id}`),
       priority: priority(story.pri),
       status: stringValue(story.status, '-'),
+      assignedTo: assignedTo(story),
       raw: story
     });
   }
@@ -129,6 +154,7 @@ export async function loadProjectData(client: ZenTaoClient, projectId: number): 
         name: stringValue(task.name, `任务 #${task.id}`),
         priority: priority(task.pri),
         status: stringValue(task.status, '-'),
+        assignedTo: assignedTo(task),
         executionId: result.value.execution.id,
         raw: task
       });

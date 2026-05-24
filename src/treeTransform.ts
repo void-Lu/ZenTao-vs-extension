@@ -127,10 +127,10 @@ export function transformTreeData(state: TreeDataState, options: TreeTransformOp
   const tokens = tokenize(options.filterText);
   const stories = tokens.length === 0
     ? state.stories
-    : state.stories.filter((story) => matchesAllTokens(tokens, [String(story.id), story.title]));
+    : state.stories.filter((story) => matchesAllTokens(tokens, [String(story.id), story.title, story.assignedTo ?? '']));
   const tasks = tokens.length === 0
     ? state.tasks
-    : state.tasks.filter((task) => matchesAllTokens(tokens, [String(task.id), task.name]));
+    : state.tasks.filter((task) => matchesAllTokens(tokens, [String(task.id), task.name, task.assignedTo ?? '']));
 
   return {
     ...state,

@@ -48,6 +48,20 @@ function displayFirst(raw: AnyRecord, keys: string[]): string {
   return displayValue(firstValue(raw, keys));
 }
 
+function displayTeam(value: unknown): string {
+  const members = asArray(value)
+    .map((member) => stringValue(member))
+    .filter(Boolean);
+  return members.length ? members.join(', ') : emptyValue;
+}
+
+function assignedTo(raw: AnyRecord): string {
+  if (stringValue(raw.mode).toLowerCase() === 'multi') {
+    return displayTeam(raw.team);
+  }
+  return displayFirst(raw, ['assignedToRealName', 'assignedTo']);
+}
+
 function withDate(raw: AnyRecord, nameKeys: string[], dateKeys: string[]): string {
   const name = stringValue(firstValue(raw, nameKeys));
   const date = stringValue(firstValue(raw, dateKeys));
@@ -86,10 +100,6 @@ function storyBasicFieldGroups(raw: AnyRecord): BasicFieldGroup[] {
     },
     {
       fields: [
-        field('所属模块', displayFirst(raw, ['moduleName', 'module'])),
-        field('所属计划', displayFirst(raw, ['planTitle', 'planName', 'plan'])),
-        field('来源', displayFirst(raw, ['source'])),
-        field('来源备注', displayFirst(raw, ['sourceNote', 'sourceNotes'])),
         field('当前状态', displayFirst(raw, ['status'])),
         field('所处阶段', displayFirst(raw, ['stage'])),
         field('类别', displayFirst(raw, ['category', 'type'])),
@@ -109,7 +119,7 @@ function taskBasicFieldGroups(raw: AnyRecord): BasicFieldGroup[] {
         field('所属执行', displayFirst(raw, ['executionName', 'execution'])),
         field('所属模块', displayFirst(raw, ['moduleName', 'module'])),
         field('相关研发需求', displayFirst(raw, ['storyTitle', 'storyName', 'story'])),
-        field('指派给', displayFirst(raw, ['assignedToRealName', 'assignedTo'])),
+        field('指派给', assignedTo(raw)),
         field('任务模式', displayFirst(raw, ['mode'])),
         field('任务类型', displayFirst(raw, ['type'])),
         field('任务状态', displayFirst(raw, ['status'])),
@@ -183,13 +193,11 @@ function extractAttachments(raw: AnyRecord): AttachmentViewModel[] {
 function extractActivities(raw: AnyRecord): ActivityViewModel[] {
   return asArray(raw.actions).map((item) => {
     const action = asRecord(item);
-    const commentHtml = sanitizeRichHtml(action.comment);
-    const descriptionHtml = sanitizeRichHtml(action.desc ?? action.history);
     return {
-      date: stringValue(action.date, '未知时间'),
-      actor: stringValue(action.actor, '未知用户'),
-      action: stringValue(action.action, '记录'),
-      contentHtml: commentHtml || descriptionHtml || ''
+      date: '',
+      actor: '',
+      action: '',
+      contentHtml: sanitizeRichHtml(action.desc)
     };
   });
 }

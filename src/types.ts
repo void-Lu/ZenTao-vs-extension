@@ -34,6 +34,7 @@ export interface StoryListItem {
   title: string;
   priority: string;
   status: string;
+  assignedTo?: string;
   raw: unknown;
 }
 
@@ -42,6 +43,7 @@ export interface TaskListItem {
   name: string;
   priority: string;
   status: string;
+  assignedTo?: string;
   executionId?: number;
   raw: unknown;
 }

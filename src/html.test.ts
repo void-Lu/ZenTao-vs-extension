@@ -22,7 +22,7 @@ describe('renderDetailHtml', () => {
     });
 
     expect(html).toContain("script-src 'nonce-abc'");
-    expect(html).toContain('img-src vscode-webview:;');
+    expect(html).toContain('img-src vscode-webview: https: http:;');
     expect(html.indexOf('附件')).toBeLessThan(html.indexOf('历史记录'));
     expect(html).toContain('需求描述');
     expect(html).toContain('验收标准');
@@ -32,6 +32,10 @@ describe('renderDetailHtml', () => {
     expect(html).toContain('data-attachment-index="0"');
     expect(html).toContain('spec.docx');
     expect(html).toContain('15.11K');
+    expect(html).toContain('<ol class="activity-list">');
+    expect(html).toContain('<div class="rich-content">评论</div>');
+    expect(html).not.toContain('activity-meta');
+    expect(html).not.toContain('2026-05-21，由 张三 commented');
     expect(html).not.toContain('<button');
   });
 
