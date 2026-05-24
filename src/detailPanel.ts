@@ -22,7 +22,10 @@ export class DetailPanel {
         vscode.ViewColumn.One,
         { enableScripts: true, retainContextWhenHidden: true }
       );
-      this.panel.onDidDispose(() => { this.panel = undefined; });
+      this.panel.onDidDispose(() => {
+        this.panel = undefined;
+        this.currentDetail = undefined;
+      });
       this.panel.webview.onDidReceiveMessage(async (message: { type?: string; index?: number }) => {
         if (message.type === 'downloadAttachment' && this.currentDetail && typeof message.index === 'number') {
           const attachment = this.currentDetail.attachments[message.index];
@@ -41,5 +44,15 @@ export class DetailPanel {
       cspSource: this.panel.webview.cspSource
     });
     this.panel.reveal(vscode.ViewColumn.One);
+  }
+
+  isOpen(): boolean {
+    return this.panel !== undefined;
+  }
+
+  close(): void {
+    this.panel?.dispose();
+    this.panel = undefined;
+    this.currentDetail = undefined;
   }
 }

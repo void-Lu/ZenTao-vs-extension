@@ -4,6 +4,13 @@ export interface ProjectQuickPickItem {
   projectId: number;
 }
 
+export class ProjectListUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    Object.setPrototypeOf(this, ProjectListUnavailableError.prototype);
+  }
+}
+
 export interface ProjectSelectionClient {
   getProjects(): Promise<unknown>;
 }
@@ -20,6 +27,7 @@ export interface ProjectSelectionWindow {
 
 export interface EnsureProjectIdOptions {
   existingProjectId: number | undefined;
+  forceSelection?: boolean;
   client: ProjectSelectionClient;
   configuration: ProjectSelectionConfiguration;
   window: ProjectSelectionWindow;
@@ -58,32 +66,29 @@ export function parseManualProjectId(value: string | undefined): number | undefi
   return Number.isInteger(projectId) && projectId > 0 ? projectId : undefined;
 }
 
-async function promptManualProjectId(options: EnsureProjectIdOptions): Promise<number | undefined> {
-  const value = await options.window.showInputBox({ prompt: '输入禅道项目 ID', ignoreFocusOut: true });
-  const projectId = parseManualProjectId(value);
-  if (projectId === undefined) {
-    await options.window.showWarningMessage('ZenTao project ID must be a positive integer.');
-    return undefined;
-  }
-  await options.configuration.update('projectId', projectId, false);
-  return projectId;
-}
-
 export async function ensureProjectId(options: EnsureProjectIdOptions): Promise<number | undefined> {
-  if (options.existingProjectId !== undefined) {
+  if (options.existingProjectId !== undefined && !options.forceSelection) {
     return options.existingProjectId;
   }
 
+  let items: ProjectQuickPickItem[];
   try {
-    const items = mapProjectQuickPickItems(await options.client.getProjects());
-    const selected = await options.window.showQuickPick(items, { ignoreFocusOut: true, placeHolder: '选择禅道项目' });
-    if (selected) {
-      await options.configuration.update('projectId', selected.projectId, false);
-      return selected.projectId;
-    }
+    items = mapProjectQuickPickItems(await options.client.getProjects());
   } catch {
-    await options.window.showWarningMessage('无法获取禅道项目列表，请手动输入项目 ID。');
+    await options.window.showWarningMessage('无法获取禅道项目列表。');
+    throw new ProjectListUnavailableError('Project list is unavailable.');
   }
 
-  return promptManualProjectId(options);
+  if (items.length === 0) {
+    await options.window.showWarningMessage('没有可选择的禅道项目。');
+    throw new ProjectListUnavailableError('Project list is empty.');
+  }
+
+  const selected = await options.window.showQuickPick(items, { ignoreFocusOut: true, placeHolder: '选择禅道项目' });
+  if (selected) {
+    await options.configuration.update('projectId', selected.projectId, false);
+    return selected.projectId;
+  }
+
+  return options.existingProjectId;
 }
