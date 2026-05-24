@@ -67,22 +67,29 @@ export interface ActivityViewModel {
   date: string;
   actor: string;
   action: string;
-  commentHtml: string;
-  descriptionHtml: string;
+  contentHtml: string;
 }
 
 export interface BasicField {
-  label: '项目' | '产品' | '状态' | '优先级' | '指派' | '版本';
+  label: string;
   value: string;
+}
+
+export interface BasicFieldGroup {
+  fields: BasicField[];
+}
+
+export interface DetailContentSection {
+  title: string;
+  html: string;
 }
 
 export interface DetailViewModel {
   id: number;
   type: ZenTaoItemType;
   title: string;
-  basicFields: BasicField[];
-  descriptionHtml: string;
-  acceptanceHtml: string;
+  basicFieldGroups: BasicFieldGroup[];
+  contentSections: DetailContentSection[];
   attachments: AttachmentViewModel[];
   activities: ActivityViewModel[];
   raw: unknown;

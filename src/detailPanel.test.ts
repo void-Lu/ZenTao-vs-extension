@@ -16,9 +16,8 @@ function detail(id: number, type: 'story' | 'task' = 'story') {
     id,
     type,
     title: `Item ${id}`,
-    basicFields: [],
-    descriptionHtml: '',
-    acceptanceHtml: '',
+    basicFieldGroups: [],
+    contentSections: [],
     attachments: [],
     activities: [],
     raw: {}
@@ -86,5 +85,28 @@ describe('DetailPanel', () => {
     expect(createWebviewPanel).toHaveBeenCalledTimes(1);
     expect(panelObject.title).toBe('#2 Item 2');
     expect(reveal).toHaveBeenCalledTimes(2);
+  });
+  it('downloads the selected attachment from a webview message', async () => {
+    let messageHandler: ((message: { type?: string; index?: number }) => Promise<void>) | undefined;
+    createWebviewPanel.mockReturnValue({
+      title: '',
+      webview: {
+        cspSource: 'vscode-resource:',
+        onDidReceiveMessage: vi.fn((handler: (message: { type?: string; index?: number }) => Promise<void>) => { messageHandler = handler; }),
+        html: ''
+      },
+      onDidDispose: vi.fn(),
+      reveal: vi.fn(),
+      dispose: vi.fn()
+    });
+    const attachment = { id: 7, name: 'spec.docx', addedDate: '2026-05-21', raw: {} };
+    const attachmentService = { download: vi.fn() };
+    const { DetailPanel } = await import('./detailPanel');
+    const panel = new DetailPanel({} as any, attachmentService as any);
+
+    panel.show({ ...detail(1), attachments: [attachment] });
+    await messageHandler?.({ type: 'downloadAttachment', index: 0 });
+
+    expect(attachmentService.download).toHaveBeenCalledWith(attachment);
   });
 });

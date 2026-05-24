@@ -1,9 +1,10 @@
-import { AttachmentViewModel, DetailViewModel, ZenTaoItemType, ActivityViewModel } from './types';
+import { ActivityViewModel, AttachmentViewModel, BasicField, BasicFieldGroup, DetailContentSection, DetailViewModel, ZenTaoItemType } from './types';
 import { escapeHtml, sanitizeRichHtml } from './html';
 import { redactSensitiveText } from './requestLogger';
 
 type AnyRecord = Record<string, unknown>;
 const sensitiveRawJsonKeys = new Set(['token', 'password', 'cookie']);
+const emptyValue = '暂无';
 
 function asRecord(value: unknown): AnyRecord {
   return value && typeof value === 'object' ? value as AnyRecord : {};
@@ -30,9 +31,134 @@ function stringValue(value: unknown, fallback = ''): string {
   return String(value);
 }
 
+function displayValue(value: unknown): string {
+  return stringValue(value, emptyValue);
+}
+
+function firstValue(raw: AnyRecord, keys: string[]): unknown {
+  for (const key of keys) {
+    if (raw[key] !== undefined && raw[key] !== null && raw[key] !== '') {
+      return raw[key];
+    }
+  }
+  return undefined;
+}
+
+function displayFirst(raw: AnyRecord, keys: string[]): string {
+  return displayValue(firstValue(raw, keys));
+}
+
+function withDate(raw: AnyRecord, nameKeys: string[], dateKeys: string[]): string {
+  const name = stringValue(firstValue(raw, nameKeys));
+  const date = stringValue(firstValue(raw, dateKeys));
+  if (name && date) {
+    return `${name} 于 ${date}`;
+  }
+  return name || date || emptyValue;
+}
+
 function priority(value: unknown): string {
-  const raw = stringValue(value, '-');
-  return raw.startsWith('P') ? raw : `P${raw}`;
+  const raw = stringValue(value);
+  if (!raw) {
+    return emptyValue;
+  }
+  const normalized = raw.replace(/^P/i, '');
+  const circled: Record<string, string> = { '1': '①', '2': '②', '3': '③', '4': '④' };
+  return circled[normalized] ?? raw;
+}
+
+function field(label: string, value: string): BasicField {
+  return { label, value };
+}
+
+function storyBasicFieldGroups(raw: AnyRecord): BasicFieldGroup[] {
+  return [
+    {
+      fields: [
+        field('由谁创建', withDate(raw, ['openedBy', 'createdBy'], ['openedDate', 'createdDate'])),
+        field('指派给', withDate(raw, ['assignedToRealName', 'assignedTo'], ['assignedDate'])),
+        field('评审人员', displayFirst(raw, ['reviewedBy', 'reviewer'])),
+        field('评审时间', displayFirst(raw, ['reviewedDate', 'reviewDate'])),
+        field('由谁关闭', withDate(raw, ['closedBy'], ['closedDate'])),
+        field('关闭原因', displayFirst(raw, ['closedReason', 'closeReason'])),
+        field('最后修改', withDate(raw, ['lastEditedBy', 'editedBy'], ['lastEditedDate', 'editedDate']))
+      ]
+    },
+    {
+      fields: [
+        field('所属模块', displayFirst(raw, ['moduleName', 'module'])),
+        field('所属计划', displayFirst(raw, ['planTitle', 'planName', 'plan'])),
+        field('来源', displayFirst(raw, ['source'])),
+        field('来源备注', displayFirst(raw, ['sourceNote', 'sourceNotes'])),
+        field('当前状态', displayFirst(raw, ['status'])),
+        field('所处阶段', displayFirst(raw, ['stage'])),
+        field('类别', displayFirst(raw, ['category', 'type'])),
+        field('优先级', priority(firstValue(raw, ['pri', 'priority']))),
+        field('预计工时', displayFirst(raw, ['estimate', 'estimatedHours'])),
+        field('关键词', displayFirst(raw, ['keywords', 'keywordsText'])),
+        field('抄送给', displayFirst(raw, ['mailto', 'mailTo', 'cc']))
+      ]
+    }
+  ];
+}
+
+function taskBasicFieldGroups(raw: AnyRecord): BasicFieldGroup[] {
+  return [
+    {
+      fields: [
+        field('所属执行', displayFirst(raw, ['executionName', 'execution'])),
+        field('所属模块', displayFirst(raw, ['moduleName', 'module'])),
+        field('相关研发需求', displayFirst(raw, ['storyTitle', 'storyName', 'story'])),
+        field('指派给', displayFirst(raw, ['assignedToRealName', 'assignedTo'])),
+        field('任务模式', displayFirst(raw, ['mode'])),
+        field('任务类型', displayFirst(raw, ['type'])),
+        field('任务状态', displayFirst(raw, ['status'])),
+        field('进度', displayFirst(raw, ['progress'])),
+        field('优先级', priority(firstValue(raw, ['pri', 'priority']))),
+        field('抄送给', displayFirst(raw, ['mailto', 'mailTo', 'cc']))
+      ]
+    },
+    {
+      fields: [
+        field('最初预计', displayFirst(raw, ['estimate', 'estimatedHours'])),
+        field('总计消耗', displayFirst(raw, ['consumed'])),
+        field('预计剩余', displayFirst(raw, ['left', 'remain', 'remaining'])),
+        field('预计开始', displayFirst(raw, ['estStarted', 'estimateStarted'])),
+        field('实际开始', displayFirst(raw, ['realStarted', 'startedDate'])),
+        field('截止日期', displayFirst(raw, ['deadline', 'dueDate']))
+      ]
+    },
+    {
+      fields: [
+        field('由谁创建', withDate(raw, ['openedBy', 'createdBy'], ['openedDate', 'createdDate'])),
+        field('由谁完成', withDate(raw, ['finishedBy'], ['finishedDate'])),
+        field('由谁取消', withDate(raw, ['canceledBy', 'cancelledBy'], ['canceledDate', 'cancelledDate'])),
+        field('由谁关闭', withDate(raw, ['closedBy'], ['closedDate'])),
+        field('关闭原因', displayFirst(raw, ['closedReason', 'closeReason'])),
+        field('最后编辑', withDate(raw, ['lastEditedBy', 'editedBy'], ['lastEditedDate', 'editedDate']))
+      ]
+    }
+  ];
+}
+
+function section(title: string, value: unknown): DetailContentSection {
+  const html = sanitizeRichHtml(value);
+  return { title, html: html || emptyValue };
+}
+
+function contentSections(type: ZenTaoItemType, raw: AnyRecord): DetailContentSection[] {
+  if (type === 'story') {
+    return [
+      section('需求描述', raw.spec ?? raw.desc),
+      section('验收标准', raw.verify ?? raw.storyVerify)
+    ];
+  }
+
+  return [
+    section('任务描述', raw.desc),
+    section('研发需求描述', raw.storySpec ?? raw.spec),
+    section('验收标准', raw.verify ?? raw.storyVerify)
+  ];
 }
 
 function redactSensitiveRawJsonKey(key: string, value: unknown): unknown {
@@ -57,12 +183,13 @@ function extractAttachments(raw: AnyRecord): AttachmentViewModel[] {
 function extractActivities(raw: AnyRecord): ActivityViewModel[] {
   return asArray(raw.actions).map((item) => {
     const action = asRecord(item);
+    const commentHtml = sanitizeRichHtml(action.comment);
+    const descriptionHtml = sanitizeRichHtml(action.desc ?? action.history);
     return {
       date: stringValue(action.date, '未知时间'),
       actor: stringValue(action.actor, '未知用户'),
       action: stringValue(action.action, '记录'),
-      commentHtml: sanitizeRichHtml(action.comment),
-      descriptionHtml: sanitizeRichHtml(action.desc ?? action.history)
+      contentHtml: commentHtml || descriptionHtml || ''
     };
   });
 }
@@ -71,24 +198,13 @@ export function toDetailViewModel(type: ZenTaoItemType, value: unknown): DetailV
   const raw = asRecord(value);
   const id = Number(raw.id);
   const title = stringValue(type === 'story' ? raw.title : raw.name, `#${id}`);
-  const projectName = stringValue(raw.projectName, stringValue(raw.project, '-'));
-  const productName = stringValue(raw.productName, stringValue(raw.product, '-'));
-  const assigned = stringValue(raw.assignedToRealName, stringValue(raw.assignedTo, '-'));
 
   return {
     id,
     type,
     title,
-    basicFields: [
-      { label: '项目', value: projectName },
-      { label: '产品', value: productName },
-      { label: '状态', value: stringValue(raw.status, '-') },
-      { label: '优先级', value: priority(raw.pri) },
-      { label: '指派', value: assigned },
-      { label: '版本', value: stringValue(raw.version, '-') }
-    ],
-    descriptionHtml: sanitizeRichHtml(raw.spec ?? raw.desc),
-    acceptanceHtml: sanitizeRichHtml(raw.verify ?? raw.storyVerify),
+    basicFieldGroups: type === 'story' ? storyBasicFieldGroups(raw) : taskBasicFieldGroups(raw),
+    contentSections: contentSections(type, raw),
     attachments: extractAttachments(raw),
     activities: extractActivities(raw),
     raw
