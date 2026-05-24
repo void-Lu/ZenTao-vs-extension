@@ -12,3 +12,4 @@ resources/test-account-info.txt
 !.omx/plans/
 !.omx/specs/
 .claude
+.vscode

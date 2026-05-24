@@ -18,3 +18,4 @@ vitest.config.ts
 .gitignore
 CLAUDE.md
 *.vsix
+.vscode
