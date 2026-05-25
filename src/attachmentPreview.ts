@@ -1,7 +1,7 @@
-import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 import * as pdfParseModule from 'pdf-parse';
 import MarkdownIt from 'markdown-it';
+import readXlsxFile from 'read-excel-file/node';
 import { AttachmentViewModel } from './types';
 import { escapeHtml, sanitizeRichHtml } from './html';
 import { escapedJson } from './detailMapper';
@@ -25,7 +25,7 @@ export interface WorkbookPreviewSheet {
 }
 
 export interface AttachmentPreviewAdapters {
-  readWorkbook?: (bytes: Buffer) => WorkbookPreviewSheet[];
+  readWorkbook?: (bytes: Buffer) => WorkbookPreviewSheet[] | Promise<WorkbookPreviewSheet[]>;
   convertDocx?: (bytes: Buffer) => Promise<string>;
   extractPdfText?: (bytes: Buffer) => Promise<string>;
   renderMarkdown?: (markdown: string) => string;
@@ -81,7 +81,7 @@ export async function renderAttachmentPreview(
     }
 
     if (extension === 'xlsx' || extension === 'xls') {
-      const sheets = adapters.readWorkbook ? adapters.readWorkbook(buffer) : defaultReadWorkbook(buffer);
+      const sheets = adapters.readWorkbook ? await adapters.readWorkbook(buffer) : await defaultReadWorkbook(buffer);
       return { ...base, kind: 'excel', html: renderWorkbook(sheets) };
     }
 
@@ -160,12 +160,9 @@ function renderPdfText(text: string): string {
   return nonEmptyPages.map((page, index) => `<section><h3>第 ${index + 1} 页</h3><pre>${escapeHtml(page)}</pre></section>`).join('');
 }
 
-function defaultReadWorkbook(bytes: Buffer): WorkbookPreviewSheet[] {
-  const workbook = XLSX.read(bytes, { type: 'buffer' });
-  return workbook.SheetNames.map((name) => ({
-    name,
-    rows: XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1, raw: false, defval: '' }) as unknown[][]
-  }));
+async function defaultReadWorkbook(bytes: Buffer): Promise<WorkbookPreviewSheet[]> {
+  const sheets = await readXlsxFile(bytes);
+  return sheets.map((sheet) => ({ name: sheet.sheet, rows: sheet.data as unknown[][] }));
 }
 
 function renderWorkbook(sheets: WorkbookPreviewSheet[]): string {
