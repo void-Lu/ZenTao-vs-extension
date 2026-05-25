@@ -93,26 +93,95 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
     .activity-list { padding-left: 22px; }
     li { margin: 8px 0; }
     a { color: var(--vscode-textLink-foreground); cursor: pointer; }
+    button { color: var(--vscode-button-foreground); background: var(--vscode-button-background); border: 0; border-radius: 3px; padding: 5px 10px; cursor: pointer; }
+    button:hover { background: var(--vscode-button-hoverBackground); }
+    .detail-actions { display: flex; justify-content: flex-end; margin-bottom: 12px; }
     pre { overflow: auto; padding: 8px; border: 1px solid var(--vscode-panel-border); }
     .rich-content table { border-collapse: collapse; }
     .rich-content th, .rich-content td { border: 1px solid var(--vscode-panel-border); padding: 4px 6px; }
-    .rich-content img { max-width: 100%; }
+    .rich-content img { max-width: 100%; cursor: zoom-in; }
+    .image-modal[hidden] { display: none; }
+    .image-modal { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.72); padding: 24px; }
+    .image-modal-content { max-width: 96vw; max-height: 96vh; display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
+    .image-modal-actions { display: flex; gap: 8px; }
+    .image-modal img { max-width: 96vw; max-height: 84vh; object-fit: contain; background: var(--vscode-editor-background); }
   </style>
 </head>
 <body>
+  <div class="detail-actions"><button type="button" data-export-markdown>导出 MD</button></div>
   <h1>#${escapeHtml(detail.id)} ${escapeHtml(detail.title)}</h1>
   <section>${fieldGroups}</section>
   ${contentSections}
   <section><h2>附件</h2>${attachments}</section>
   <section class="focus-block"><h2>历史记录</h2>${activities}</section>
   <details><summary>完整原始响应</summary><pre>${escapedJson(detail.raw)}</pre></details>
+  <div class="image-modal" data-image-modal hidden>
+    <div class="image-modal-content">
+      <div class="image-modal-actions">
+        <button type="button" data-download-image>下载图片</button>
+        <button type="button" data-close-image-modal>关闭</button>
+      </div>
+      <img data-modal-image alt="">
+    </div>
+  </div>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
+    const exportMarkdownButton = document.querySelector('[data-export-markdown]');
+    const imageModal = document.querySelector('[data-image-modal]');
+    const modalImage = document.querySelector('[data-modal-image]');
+    const downloadImageButton = document.querySelector('[data-download-image]');
+    let activeImageSrc = '';
+
+    exportMarkdownButton?.addEventListener('click', () => {
+      vscode.postMessage({ type: 'exportMarkdown' });
+    });
+
     document.querySelectorAll('[data-attachment-index]').forEach((link) => {
       link.addEventListener('click', (event) => {
         event.preventDefault();
         vscode.postMessage({ type: 'downloadAttachment', index: Number(link.dataset.attachmentIndex) });
       });
+    });
+
+    document.querySelectorAll('.rich-content img').forEach((image) => {
+      image.addEventListener('click', () => {
+        const src = image.getAttribute('src');
+        if (!src || !imageModal || !modalImage) {
+          return;
+        }
+        activeImageSrc = src;
+        modalImage.setAttribute('src', src);
+        modalImage.setAttribute('alt', image.getAttribute('alt') || '');
+        imageModal.removeAttribute('hidden');
+      });
+    });
+
+    downloadImageButton?.addEventListener('click', () => {
+      if (activeImageSrc) {
+        vscode.postMessage({ type: 'downloadImage', src: activeImageSrc });
+      }
+    });
+
+    function closeImageModal() {
+      if (!imageModal || !modalImage) {
+        return;
+      }
+      imageModal.setAttribute('hidden', '');
+      modalImage.removeAttribute('src');
+      activeImageSrc = '';
+    }
+
+    imageModal?.addEventListener('click', (event) => {
+      const target = event.target;
+      if (target === imageModal || target instanceof Element && target.hasAttribute('data-close-image-modal')) {
+        closeImageModal();
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        closeImageModal();
+      }
     });
   </script>
 </body>

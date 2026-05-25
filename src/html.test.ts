@@ -12,7 +12,7 @@ describe('renderDetailHtml', () => {
         title: '登录优化',
         basicFieldGroups: [{ fields: [{ label: '当前状态', value: '激活' }] }],
         contentSections: [
-          { title: '需求描述', html: '<p>描述</p>' },
+          { title: '需求描述', html: '<p>描述<img src="https://zentao.example.com/file.png" alt="截图"></p>' },
           { title: '验收标准', html: '暂无' }
         ],
         attachments: [{ id: 1, name: 'spec.docx', size: '15.11K', addedDate: '2026-05-21', raw: {} }],
@@ -32,11 +32,16 @@ describe('renderDetailHtml', () => {
     expect(html).toContain('data-attachment-index="0"');
     expect(html).toContain('spec.docx');
     expect(html).toContain('15.11K');
+    expect(html).toContain('data-export-markdown');
+    expect(html).toContain('导出 MD');
+    expect(html).toContain('class="image-modal"');
+    expect(html).toContain('data-modal-image');
+    expect(html).toContain('downloadImage');
+    expect(html).toContain('exportMarkdown');
     expect(html).toContain('<ol class="activity-list">');
     expect(html).toContain('<div class="rich-content">评论</div>');
     expect(html).not.toContain('activity-meta');
     expect(html).not.toContain('2026-05-21，由 张三 commented');
-    expect(html).not.toContain('<button');
   });
 
   it('renders an empty history state when actions are absent', () => {

@@ -1,6 +1,6 @@
 # ZenTao VS Extension
 
-ZenTao VS Extension 是一个 VS Code 插件，用于在编辑器内浏览禅道项目、需求和任务，并快速查看详情、复制编号、打开外部链接和下载附件。
+ZenTao VS Extension 是一个 VS Code 插件，用于在编辑器内浏览禅道项目、需求和任务，并快速查看详情、复制编号、打开外部链接、下载附件和导出详情内容。
 
 ## 功能特性
 
@@ -8,7 +8,9 @@ ZenTao VS Extension 是一个 VS Code 插件，用于在编辑器内浏览禅道
 - 浏览当前工作区配置的禅道项目。
 - 按需求和任务分组展示项目数据。
 - 打开需求/任务详情，查看字段、描述、附件、动态历史和原始响应。
+- 支持详情页图片点击放大预览，并可保存图片到本地。
 - 支持附件保存到本地。
+- 支持将详情页展示内容一键导出为 Markdown 文件。
 - 支持复制需求/任务编号、在浏览器打开禅道页面。
 - 支持请求日志输出，便于排查连接和 API 问题。
 - 首次缺少项目 ID 时，可从可访问项目列表中选择项目，或手动输入项目 ID。
@@ -31,6 +33,12 @@ npm run compile
 ```
 
 编译输出位于 `out/`，插件入口为 `out/extension.js`。
+
+如需生成本地安装包，可执行：
+
+```bash
+npx @vscode/vsce package --allow-missing-repository --skip-license
+```
 
 ## 配置
 
@@ -61,12 +69,20 @@ npm run compile
 | 刷新禅道数据 | ZenTao 视图标题栏 | 重新加载项目、需求和任务。 |
 | 请求日志 | ZenTao 视图标题栏 | 打开 `ZenTao Requests` 输出通道。 |
 | 打开详情 | 需求/任务节点 | 在 Webview 中查看详情。 |
+| 导出 MD | 详情页顶部按钮 | 将当前详情页展示内容导出到工作区根目录 `requirements/` 下。 |
+| 图片预览/下载 | 详情页富文本图片 | 点击图片放大预览，并可在预览层保存图片。 |
 | 复制编号 | 需求/任务节点右键菜单 | 复制当前需求或任务编号。 |
 | 在浏览器打开 | 需求/任务节点右键菜单 | 使用默认浏览器打开禅道页面。 |
 
 ## 附件下载
 
 在需求或任务详情中，如果存在附件，可以通过详情页中的附件操作保存到本地。插件会调用 VS Code 保存对话框，让你选择保存路径。
+
+## 详情页图片与 Markdown 导出
+
+在需求或任务详情中，富文本内容里的图片可以点击放大预览。预览层提供“下载图片”操作，会调用 VS Code 保存对话框让你选择本地路径。
+
+详情页顶部的“导出 MD”按钮会把当前页面展示的标题、基础字段、正文、附件和历史记录导出为 Markdown 文件。导出文件保存到当前工作区根目录的 `requirements/` 文件夹内，不包含“完整原始响应”。
 
 ## 请求日志与排错
 
@@ -83,7 +99,9 @@ npm run compile
 
 - 禅道富文本内容会在详情页渲染前进行 HTML 清洗。
 - Webview 使用 nonce 绑定脚本并设置 CSP。
+- Webview 消息会在扩展宿主侧校验类型和参数后再执行下载或导出操作。
 - 请求日志和详情原始响应会对敏感字段进行脱敏。
+- Markdown 导出只包含页面展示内容，不写入完整原始响应。
 - `zentao.baseUrl` 不允许包含嵌入式凭据。
 
 ## 开发
@@ -93,6 +111,7 @@ npm install
 npm run compile
 npm test
 npm run verify
+npx @vscode/vsce package --allow-missing-repository --skip-license
 ```
 
 常用脚本：
@@ -103,7 +122,8 @@ npm run verify
 | `npm run watch` | 以 watch 模式运行 TypeScript。 |
 | `npm test` | 运行全部 Vitest 测试。 |
 | `npm run verify` | 编译并运行完整测试套件。 |
+| `npx @vscode/vsce package --allow-missing-repository --skip-license` | 编译并生成 VSIX 安装包。 |
 
 ## 版本
 
-当前版本：`0.3.0`
+当前版本：`0.5.0`
