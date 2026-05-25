@@ -39,8 +39,40 @@ function normalizeMarkdown(value: string): string {
     .trim();
 }
 
+function convertHtmlTablesToMarkdown(html: string): string {
+  return html.replace(/<table[^>]*>([\s\S]*?)<\/table>/gi, (_match, tableBody: string) => {
+    const rows: string[][] = [];
+    const rowMatches = tableBody.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) || [];
+    for (const rowHtml of rowMatches) {
+      const cells: string[] = [];
+      const cellMatches = rowHtml.match(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/gi) || [];
+      for (const cellHtml of cellMatches) {
+        cells.push(stripHtml(cellHtml));
+      }
+      if (cells.length) { rows.push(cells); }
+    }
+    if (!rows.length) { return ''; }
+
+    const maxCols = Math.max(...rows.map((r) => r.length));
+    const normalized = rows.map((r) => {
+      while (r.length < maxCols) { r.push(''); }
+      return r;
+    });
+
+    const lines: string[] = [];
+    lines.push(`| ${normalized[0].join(' | ')} |`);
+    lines.push(`| ${normalized[0].map(() => '---').join(' | ')} |`);
+    for (let i = 1; i < normalized.length; i++) {
+      lines.push(`| ${normalized[i].join(' | ')} |`);
+    }
+    return '\n' + lines.join('\n') + '\n';
+  });
+}
+
 export function richHtmlToMarkdown(html: string): string {
-  let markdown = html
+  let markdown = convertHtmlTablesToMarkdown(html);
+
+  markdown = markdown
     .replace(/<img\b([^>]*)>/gi, (_, attributes: string) => {
       const src = attributeValue(attributes, 'src');
       if (!src) {

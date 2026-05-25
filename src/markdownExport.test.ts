@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detailToMarkdown, markdownFileName } from './markdownExport';
+import { detailToMarkdown, markdownFileName, richHtmlToMarkdown } from './markdownExport';
 import { DetailViewModel } from './types';
 
 function detail(): DetailViewModel {
@@ -45,5 +45,13 @@ describe('markdownExport', () => {
 
     expect(markdown).toContain('- **相关研发需求**：需求 A');
     expect(markdown).not.toContain('linkType');
+  });
+
+  it('converts HTML tables in rich content to markdown tables', () => {
+    const md = richHtmlToMarkdown('<table><tr><th>名称</th><th>状态</th></tr><tr><td>任务A</td><td>完成</td></tr><tr><td>任务B</td><td>进行中</td></tr></table>');
+    expect(md).toContain('| 名称 | 状态 |');
+    expect(md).toContain('| --- | --- |');
+    expect(md).toContain('| 任务A | 完成 |');
+    expect(md).toContain('| 任务B | 进行中 |');
   });
 });
