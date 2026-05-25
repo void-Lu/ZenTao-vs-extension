@@ -292,3 +292,47 @@ describe('DetailPanel', () => {
     expect(previewWebview.html).toContain('data-export-markdown');
   });
 });
+
+describe('htmlToMarkdown', () => {
+  it('converts a simple HTML table to markdown table', async () => {
+    const { htmlToMarkdown } = await import('./detailPanel');
+    const html = '<table><tr><th>Name</th><th>Age</th></tr><tr><td>Alice</td><td>30</td></tr><tr><td>Bob</td><td>25</td></tr></table>';
+    const result = htmlToMarkdown(html);
+    expect(result).toContain('| Name | Age |');
+    expect(result).toContain('| --- | --- |');
+    expect(result).toContain('| Alice | 30 |');
+    expect(result).toContain('| Bob | 25 |');
+  });
+
+  it('converts tables with section headings and pre blocks', async () => {
+    const { htmlToMarkdown } = await import('./detailPanel');
+    const html = '<section><h3>Sheet1</h3><table><tr><td>ID</td><td>Val</td></tr><tr><td>1</td><td>ok</td></tr></table></section>';
+    const result = htmlToMarkdown(html);
+    expect(result).toContain('### Sheet1');
+    expect(result).toContain('| ID | Val |');
+    expect(result).toContain('| --- | --- |');
+    expect(result).toContain('| 1 | ok |');
+  });
+
+  it('unescapes HTML entities in table cells', async () => {
+    const { htmlToMarkdown } = await import('./detailPanel');
+    const html = '<table><tr><th>Item</th></tr><tr><td>a &amp; b &lt; c</td></tr></table>';
+    const result = htmlToMarkdown(html);
+    expect(result).toContain('a & b < c');
+  });
+
+  it('normalizes column count when rows have different lengths', async () => {
+    const { htmlToMarkdown } = await import('./detailPanel');
+    const html = '<table><tr><th>A</th><th>B</th></tr><tr><td>1</td></tr></table>';
+    const result = htmlToMarkdown(html);
+    expect(result).toContain('| A | B |');
+    expect(result).toContain('| 1 |  |');
+  });
+
+  it('preserves pre blocks as code fences', async () => {
+    const { htmlToMarkdown } = await import('./detailPanel');
+    const html = '<pre>line 1\nline 2</pre>';
+    const result = htmlToMarkdown(html);
+    expect(result).toContain('```\nline 1\nline 2\n```');
+  });
+});

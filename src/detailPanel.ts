@@ -55,6 +55,87 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function unescapeHtmlEntities(text: string): string {
+  return text
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function stripTags(html: string): string {
+  return unescapeHtmlEntities(html.replace(/<[^>]+>/g, '')).trim();
+}
+
+function convertTables(html: string): string {
+  return html.replace(/<table[^>]*>([\s\S]*?)<\/table>/gi, (_match, tableBody: string) => {
+    const rows: string[][] = [];
+    const rowMatches = tableBody.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) || [];
+    for (const rowHtml of rowMatches) {
+      const cells: string[] = [];
+      const cellMatches = rowHtml.match(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/gi) || [];
+      for (const cellHtml of cellMatches) {
+        cells.push(stripTags(cellHtml));
+      }
+      if (cells.length) { rows.push(cells); }
+    }
+    if (!rows.length) { return ''; }
+
+    // Normalize column count
+    const maxCols = Math.max(...rows.map((r) => r.length));
+    const normalized = rows.map((r) => {
+      while (r.length < maxCols) { r.push(''); }
+      return r;
+    });
+
+    const lines: string[] = [];
+    // Header row (first row)
+    lines.push(`| ${normalized[0].join(' | ')} |`);
+    // Separator row
+    lines.push(`| ${normalized[0].map(() => '---').join(' | ')} |`);
+    // Data rows
+    for (let i = 1; i < normalized.length; i++) {
+      lines.push(`| ${normalized[i].join(' | ')} |`);
+    }
+    return '\n' + lines.join('\n') + '\n';
+  });
+}
+
+export function htmlToMarkdown(html: string): string {
+  // Step 1: Convert tables to markdown tables
+  let md = convertTables(html);
+
+  // Step 2: Convert headings
+  md = md.replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, (_, t) => `\n# ${stripTags(t)}\n`);
+  md = md.replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, (_, t) => `\n## ${stripTags(t)}\n`);
+  md = md.replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gi, (_, t) => `\n### ${stripTags(t)}\n`);
+  md = md.replace(/<h[4-6][^>]*>([\s\S]*?)<\/h[4-6]>/gi, (_, t) => `\n#### ${stripTags(t)}\n`);
+
+  // Step 3: Convert <pre> blocks
+  md = md.replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, (_, t) => `\n\`\`\`\n${stripTags(t)}\n\`\`\`\n`);
+
+  // Step 4: Convert <li> items
+  md = md.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_, t) => `- ${stripTags(t)}`);
+
+  // Step 5: Convert <br> to newlines
+  md = md.replace(/<br\s*\/?>/gi, '\n');
+
+  // Step 6: Convert block elements to newlines
+  md = md.replace(/<\/?(p|div|section|tr|ol|ul)[^>]*>/gi, '\n');
+
+  // Step 7: Strip remaining inline tags
+  md = md.replace(/<[^>]+>/g, '');
+
+  // Step 8: Unescape HTML entities
+  md = unescapeHtmlEntities(md);
+
+  // Step 9: Clean up excessive blank lines
+  md = md.replace(/\n{3,}/g, '\n\n');
+
+  return md;
+}
+
 export class DetailPanel {
   private readonly panels = new Map<string, DetailPanelState>();
 
@@ -350,16 +431,7 @@ export class DetailPanel {
       if (attachment.addedDate) { lines.push(`- **添加时间**：${attachment.addedDate}`); }
       lines.push('', '## 预览内容', '');
 
-      // Strip HTML tags for a plain-text markdown export
-      const textContent = preview.html
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<\/?(p|div|section|h[1-6]|tr)[^>]*>/gi, '\n')
-        .replace(/<\/?(td|th)[^>]*>/gi, ' | ')
-        .replace(/<[^>]+>/g, '')
-        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
-      lines.push(textContent);
+      lines.push(htmlToMarkdown(preview.html).trim());
 
       await vscode.workspace.fs.writeFile(target, Buffer.from(lines.join('\n'), 'utf8'));
       vscode.window.showInformationMessage(`预览已导出：${vscode.workspace.asRelativePath(target)}`);
