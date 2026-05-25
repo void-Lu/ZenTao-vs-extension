@@ -1,10 +1,11 @@
-import mammoth from 'mammoth';
-import * as pdfParseModule from 'pdf-parse';
-import MarkdownIt from 'markdown-it';
-import readXlsxFile from 'read-excel-file/node';
 import { AttachmentViewModel } from './types';
 import { escapeHtml, sanitizeRichHtml } from './html';
 import { escapedJson } from './detailMapper';
+
+// Heavy third-party libraries are loaded lazily to avoid blocking extension
+// activation. Native addons (e.g. @napi-rs/canvas via pdf-parse) would crash
+// the module load chain if imported at the top level because VS Code's bundled
+// Node.js version may differ from the system Node.js used during npm install.
 
 export const maxPreviewBytes = 10 * 1024 * 1024;
 
@@ -59,9 +60,14 @@ export async function renderAttachmentPreview(
 
     if (extension === 'md' || extension === 'markdown') {
       const text = buffer.toString('utf8');
-      const html = adapters.renderMarkdown
-        ? adapters.renderMarkdown(text)
-        : new MarkdownIt({ html: false, linkify: false, typographer: false }).render(text);
+      let html: string;
+      if (adapters.renderMarkdown) {
+        html = adapters.renderMarkdown(text);
+      } else {
+        const MarkdownIt = (require('markdown-it') as { default?: unknown }).default || require('markdown-it');
+        const md = new (MarkdownIt as new (opts: object) => { render(s: string): string })({ html: false, linkify: false, typographer: false });
+        html = md.render(text);
+      }
       return { ...base, kind: 'markdown', html: sanitizeRichHtml(html) };
     }
 
@@ -123,12 +129,14 @@ function attachmentExtension(attachment: AttachmentViewModel): string {
 }
 
 async function defaultConvertDocx(bytes: Buffer): Promise<string> {
-  const result = await mammoth.convertToHtml({ buffer: bytes });
+  const mammothModule = require('mammoth') as { default?: { convertToHtml(input: { buffer: Buffer }): Promise<{ value: string }> }; convertToHtml?(input: { buffer: Buffer }): Promise<{ value: string }> };
+  const mammoth = mammothModule.default || mammothModule;
+  const result = await mammoth.convertToHtml!({ buffer: bytes });
   return result.value;
 }
 
 async function defaultExtractPdfText(bytes: Buffer): Promise<string> {
-  const pdfParse = pdfParseModule as unknown;
+  const pdfParse = require('pdf-parse') as unknown;
 
   if (typeof pdfParse === 'function') {
     const result = await (pdfParse as PdfParseFunction)(bytes);
@@ -161,6 +169,8 @@ function renderPdfText(text: string): string {
 }
 
 async function defaultReadWorkbook(bytes: Buffer): Promise<WorkbookPreviewSheet[]> {
+  const readXlsxModule = require('read-excel-file/node') as { default?: (input: Buffer) => Promise<{ sheet: string; data: unknown[][] }[]> } & ((input: Buffer) => Promise<{ sheet: string; data: unknown[][] }[]>);
+  const readXlsxFile = readXlsxModule.default || readXlsxModule;
   const sheets = await readXlsxFile(bytes);
   return sheets.map((sheet) => ({ name: sheet.sheet, rows: sheet.data as unknown[][] }));
 }
