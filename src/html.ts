@@ -51,19 +51,33 @@ export interface RenderDetailHtmlOptions {
   nonce: string;
 }
 
+function renderFieldValue(field: DetailViewModel['basicFieldGroups'][number]['fields'][number]): string {
+  if (field.links?.length) {
+    return field.links.map((link) => renderDetailLink(link.type, link.id, link.text)).join('、');
+  }
+  if (field.linkType && typeof field.linkId === 'number') {
+    return renderDetailLink(field.linkType, field.linkId, field.value);
+  }
+  return escapeHtml(field.value);
+}
+
+function renderDetailLink(type: string, id: number, text: string): string {
+  return `<a href="#" data-detail-link-type="${escapeHtml(type)}" data-detail-link-id="${escapeHtml(id)}">${escapeHtml(text)}</a>`;
+}
+
 export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
   const { detail, cspSource, nonce } = options;
   const fieldGroups = detail.basicFieldGroups.map((group) => `
     <div class="fields">${group.fields.map((field) => `
-      <div class="field-row"><strong>${escapeHtml(field.label)}</strong><span>${escapeHtml(field.value)}</span></div>`).join('')}
+      <div class="field-row"><strong>${escapeHtml(field.label)}</strong><span>${renderFieldValue(field)}</span></div>`).join('')}
     </div>`).join('');
 
   const contentSections = detail.contentSections.map((section) => `
     <section class="focus-block"><h2>${escapeHtml(section.title)}</h2><div class="rich-content">${section.html}</div></section>`).join('');
 
   const attachments = detail.attachments.length
-    ? `<table class="attachment-table"><thead><tr><th>文件名</th><th>大小</th></tr></thead><tbody>${detail.attachments.map((attachment, index) => `
-      <tr><td><a href="#" data-attachment-index="${index}">${escapeHtml(attachment.name)}</a></td><td>${escapeHtml(attachment.size || '暂无')}</td></tr>`).join('')}</tbody></table>`
+    ? `<table class="attachment-table"><thead><tr><th>文件名</th><th>大小</th><th>预览</th></tr></thead><tbody>${detail.attachments.map((attachment, index) => `
+      <tr><td><a href="#" data-attachment-index="${index}">${escapeHtml(attachment.name)}</a></td><td>${escapeHtml(attachment.size || '暂无')}</td><td><a href="#" data-preview-attachment-index="${index}">预览</a></td></tr>`).join('')}</tbody></table>`
     : '<p>暂无附件</p>';
 
   const activities = detail.activities.length
@@ -96,6 +110,11 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
     button { color: var(--vscode-button-foreground); background: var(--vscode-button-background); border: 0; border-radius: 3px; padding: 5px 10px; cursor: pointer; }
     button:hover { background: var(--vscode-button-hoverBackground); }
     .detail-actions { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+    .search-panel[hidden] { display: none; }
+    .search-panel { position: sticky; top: 0; z-index: 5; display: flex; gap: 8px; align-items: center; margin-bottom: 12px; padding: 8px; border: 1px solid var(--vscode-panel-border); background: var(--vscode-editor-background); }
+    .search-panel input { flex: 1; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border); padding: 4px 6px; }
+    mark.search-match { color: var(--vscode-editor-foreground); background: var(--vscode-editor-findMatchHighlightBackground); }
+    mark.search-current { outline: 1px solid var(--vscode-editor-findMatchBorder); background: var(--vscode-editor-findMatchBackground); }
     pre { overflow: auto; padding: 8px; border: 1px solid var(--vscode-panel-border); }
     .rich-content table { border-collapse: collapse; }
     .rich-content th, .rich-content td { border: 1px solid var(--vscode-panel-border); padding: 4px 6px; }
@@ -108,6 +127,12 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
   </style>
 </head>
 <body>
+  <div class="search-panel" data-search-panel hidden>
+    <label for="zentao-detail-search">Ctrl+F</label>
+    <input id="zentao-detail-search" data-search-input type="text" placeholder="搜索当前详情">
+    <span data-search-count>0/0</span>
+    <button type="button" data-close-search>关闭</button>
+  </div>
   <div class="detail-actions"><button type="button" data-export-markdown>导出 MD</button></div>
   <h1>#${escapeHtml(detail.id)} ${escapeHtml(detail.title)}</h1>
   <section>${fieldGroups}</section>
@@ -140,6 +165,20 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
       link.addEventListener('click', (event) => {
         event.preventDefault();
         vscode.postMessage({ type: 'downloadAttachment', index: Number(link.dataset.attachmentIndex) });
+      });
+    });
+
+    document.querySelectorAll('[data-preview-attachment-index]').forEach((link) => {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        vscode.postMessage({ type: 'previewAttachment', index: Number(link.dataset.previewAttachmentIndex) });
+      });
+    });
+
+    document.querySelectorAll('[data-detail-link-type][data-detail-link-id]').forEach((link) => {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        vscode.postMessage({ type: 'openDetail', itemType: link.dataset.detailLinkType, id: Number(link.dataset.detailLinkId) });
       });
     });
 
@@ -178,9 +217,136 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
       }
     });
 
+    const searchPanel = document.querySelector('[data-search-panel]');
+    const searchInput = document.querySelector('[data-search-input]');
+    const searchCount = document.querySelector('[data-search-count]');
+    const closeSearchButton = document.querySelector('[data-close-search]');
+    let searchMatches = [];
+    let currentSearchIndex = -1;
+
+    function clearSearchHighlights() {
+      document.querySelectorAll('mark.search-match').forEach((mark) => {
+        mark.replaceWith(document.createTextNode(mark.textContent || ''));
+      });
+      document.body.normalize();
+      searchMatches = [];
+      currentSearchIndex = -1;
+      updateSearchCount();
+    }
+
+    function updateSearchCount() {
+      if (searchCount) {
+        searchCount.textContent = searchMatches.length ? String(currentSearchIndex + 1) + '/' + String(searchMatches.length) : '0/0';
+      }
+    }
+
+    function collectTextNodes(root) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          const parent = node.parentElement;
+          if (!parent || parent.closest('script, style, [data-search-panel], .image-modal')) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          return node.nodeValue && node.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+        }
+      });
+      const nodes = [];
+      while (walker.nextNode()) {
+        nodes.push(walker.currentNode);
+      }
+      return nodes;
+    }
+
+    function runSearch(query) {
+      clearSearchHighlights();
+      if (!query) {
+        return;
+      }
+      const lowerQuery = query.toLocaleLowerCase();
+      collectTextNodes(document.body).forEach((node) => {
+        const text = node.nodeValue || '';
+        const lowerText = text.toLocaleLowerCase();
+        let start = 0;
+        const fragment = document.createDocumentFragment();
+        let matched = false;
+        while (true) {
+          const index = lowerText.indexOf(lowerQuery, start);
+          if (index === -1) {
+            break;
+          }
+          matched = true;
+          fragment.append(document.createTextNode(text.slice(start, index)));
+          const mark = document.createElement('mark');
+          mark.className = 'search-match';
+          mark.textContent = text.slice(index, index + query.length);
+          fragment.append(mark);
+          searchMatches.push(mark);
+          start = index + query.length;
+        }
+        if (matched) {
+          fragment.append(document.createTextNode(text.slice(start)));
+          node.replaceWith(fragment);
+        }
+      });
+      if (searchMatches.length) {
+        currentSearchIndex = 0;
+        focusSearchMatch(0);
+      }
+      updateSearchCount();
+    }
+
+    function focusSearchMatch(index) {
+      searchMatches.forEach((match) => match.classList.remove('search-current'));
+      const match = searchMatches[index];
+      if (match) {
+        match.classList.add('search-current');
+        match.scrollIntoView({ block: 'center' });
+      }
+      updateSearchCount();
+    }
+
+    function moveSearch(delta) {
+      if (!searchMatches.length) {
+        return;
+      }
+      currentSearchIndex = (currentSearchIndex + delta + searchMatches.length) % searchMatches.length;
+      focusSearchMatch(currentSearchIndex);
+    }
+
+    function openSearch() {
+      searchPanel?.removeAttribute('hidden');
+      searchInput?.focus();
+      if (searchInput?.value) {
+        runSearch(searchInput.value);
+      }
+    }
+
+    function closeSearch() {
+      searchPanel?.setAttribute('hidden', '');
+      if (searchInput) {
+        searchInput.value = '';
+      }
+      clearSearchHighlights();
+    }
+
+    searchInput?.addEventListener('input', () => runSearch(searchInput.value));
+    searchInput?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        moveSearch(event.shiftKey ? -1 : 1);
+      }
+    });
+    closeSearchButton?.addEventListener('click', closeSearch);
+
     document.addEventListener('keydown', (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        openSearch();
+        return;
+      }
       if (event.key === 'Escape') {
         closeImageModal();
+        closeSearch();
       }
     });
   </script>

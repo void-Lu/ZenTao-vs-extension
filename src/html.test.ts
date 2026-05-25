@@ -10,7 +10,14 @@ describe('renderDetailHtml', () => {
         id: 101,
         type: 'story',
         title: '登录优化',
-        basicFieldGroups: [{ fields: [{ label: '当前状态', value: '激活' }] }],
+        basicFieldGroups: [{ fields: [
+          { label: '当前状态', value: '激活' },
+          { label: '相关研发需求', value: '需求 A', linkType: 'story', linkId: 101 },
+          { label: '关联任务', value: '任务 A、任务 B', links: [
+            { type: 'task', id: 201, text: '任务 A' },
+            { type: 'task', id: 202, text: '任务 B' }
+          ] }
+        ] }],
         contentSections: [
           { title: '需求描述', html: '<p>描述<img src="https://zentao.example.com/file.png" alt="截图"></p>' },
           { title: '验收标准', html: '暂无' }
@@ -29,7 +36,13 @@ describe('renderDetailHtml', () => {
     expect(html).toContain('>暂无<');
     expect(html).toContain('<th>文件名</th>');
     expect(html).toContain('<th>大小</th>');
+    expect(html).toContain('data-detail-link-type="story"');
+    expect(html).toContain('data-detail-link-id="101"');
+    expect(html).toContain('data-detail-link-type="task"');
+    expect(html).toContain('data-detail-link-id="201"');
+    expect(html).toContain('<th>预览</th>');
     expect(html).toContain('data-attachment-index="0"');
+    expect(html).toContain('data-preview-attachment-index="0"');
     expect(html).toContain('spec.docx');
     expect(html).toContain('15.11K');
     expect(html).toContain('data-export-markdown');
@@ -37,7 +50,11 @@ describe('renderDetailHtml', () => {
     expect(html).toContain('class="image-modal"');
     expect(html).toContain('data-modal-image');
     expect(html).toContain('downloadImage');
+    expect(html).toContain('previewAttachment');
     expect(html).toContain('exportMarkdown');
+    expect(html).toContain('data-search-panel');
+    expect(html).toContain('data-search-input');
+    expect(html).toContain('Ctrl+F');
     expect(html).toContain('<ol class="activity-list">');
     expect(html).toContain('<div class="rich-content">评论</div>');
     expect(html).not.toContain('activity-meta');
