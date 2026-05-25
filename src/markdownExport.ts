@@ -47,7 +47,7 @@ function convertHtmlTablesToMarkdown(html: string): string {
       const cells: string[] = [];
       const cellMatches = rowHtml.match(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/gi) || [];
       for (const cellHtml of cellMatches) {
-        cells.push(stripHtml(cellHtml));
+        cells.push(escapeTableCell(stripHtml(cellHtml)));
       }
       if (cells.length) { rows.push(cells); }
     }

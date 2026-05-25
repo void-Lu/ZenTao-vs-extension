@@ -335,4 +335,11 @@ describe('htmlToMarkdown', () => {
     const result = htmlToMarkdown(html);
     expect(result).toContain('```\nline 1\nline 2\n```');
   });
+
+  it('escapes pipe characters in table cells', async () => {
+    const { htmlToMarkdown } = await import('./detailPanel');
+    const html = '<table><tr><th>值</th></tr><tr><td>a|b</td></tr></table>';
+    const result = htmlToMarkdown(html);
+    expect(result).toContain('| a\\|b |');
+  });
 });

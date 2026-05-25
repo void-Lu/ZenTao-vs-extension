@@ -57,11 +57,18 @@ function errorMessage(error: unknown): string {
 
 function unescapeHtmlEntities(text: string): string {
   return text
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(Number.parseInt(dec, 10)))
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/gi, ' ');
+}
+
+function escapeMdTableCell(value: string): string {
+  return value.replace(/\|/g, '\\|').replace(/\n/g, ' ');
 }
 
 function stripTags(html: string): string {
@@ -76,11 +83,10 @@ function convertTables(html: string): string {
       const cells: string[] = [];
       const cellMatches = rowHtml.match(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/gi) || [];
       for (const cellHtml of cellMatches) {
-        cells.push(stripTags(cellHtml));
+        cells.push(escapeMdTableCell(stripTags(cellHtml)));
       }
       if (cells.length) { rows.push(cells); }
     }
-    if (!rows.length) { return ''; }
 
     // Normalize column count
     const maxCols = Math.max(...rows.map((r) => r.length));

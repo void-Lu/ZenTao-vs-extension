@@ -54,4 +54,9 @@ describe('markdownExport', () => {
     expect(md).toContain('| 任务A | 完成 |');
     expect(md).toContain('| 任务B | 进行中 |');
   });
+
+  it('escapes pipe characters in table cells', () => {
+    const md = richHtmlToMarkdown('<table><tr><th>值</th></tr><tr><td>a|b</td></tr></table>');
+    expect(md).toContain('| a\\|b |');
+  });
 });
