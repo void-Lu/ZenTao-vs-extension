@@ -19,3 +19,4 @@ vitest.config.ts
 CLAUDE.md
 *.vsix
 .vscode
+!resources/zentao.svg
