@@ -98,7 +98,7 @@ function resultBase(attachment: AttachmentViewModel): Omit<AttachmentPreviewResu
   return {
     title: attachment.name,
     metadataHtml: renderMetadataHtml(attachment),
-    rawJsonHtml: `<pre>${escapedJson(attachment.raw)}</pre>`
+    rawJsonHtml: escapedJson(attachment.raw)
   };
 }
 

@@ -65,6 +65,24 @@ describe('renderAttachmentPreview', () => {
     expect(result.html).toContain('&lt;Task&gt;');
   });
 
+  it('returns escaped redacted raw JSON without a pre wrapper', async () => {
+    const result = await renderAttachmentPreview(
+      {
+        ...attachment,
+        name: 'notes.txt',
+        raw: { token: 'super-secret-token', password: 'super-secret-password', name: '<b>safe</b>' }
+      },
+      Buffer.from('preview')
+    );
+
+    expect(result.rawJsonHtml).not.toContain('<pre>');
+    expect(result.rawJsonHtml).not.toContain('</pre>');
+    expect(result.rawJsonHtml).not.toContain('super-secret-token');
+    expect(result.rawJsonHtml).not.toContain('super-secret-password');
+    expect(result.rawJsonHtml).toContain('[REDACTED]');
+    expect(result.rawJsonHtml).toContain('&lt;b&gt;safe&lt;/b&gt;');
+  });
+
   it('returns unsupported preview for legacy doc files', async () => {
     const result = await renderAttachmentPreview({ ...attachment, name: 'legacy.doc' }, Buffer.from([1]));
 
