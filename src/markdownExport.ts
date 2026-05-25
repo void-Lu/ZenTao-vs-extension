@@ -76,17 +76,13 @@ function attachmentName(attachment: AttachmentViewModel): string {
 
 export function detailToMarkdown(detail: DetailViewModel): string {
   const lines: string[] = [`# #${detail.id} ${detail.title}`, '', '## 基础字段'];
-  const basicFields = detail.basicFieldGroups.flatMap((group) => group.fields);
 
-  if (basicFields.length) {
-    lines.push('| 字段 | 值 |', '| --- | --- |');
-    for (const field of basicFields) {
-      lines.push(`| ${escapeTableCell(field.label)} | ${escapeTableCell(field.value)} |`);
+  for (const group of detail.basicFieldGroups) {
+    for (const field of group.fields) {
+      lines.push(`- **${field.label}**：${field.value}`);
     }
-  } else {
-    lines.push('暂无');
+    lines.push('');
   }
-  lines.push('');
 
   for (const section of detail.contentSections) {
     lines.push(`## ${section.title}`, richHtmlToMarkdown(section.html) || '暂无', '');
