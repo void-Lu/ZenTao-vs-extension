@@ -161,24 +161,32 @@ export class DetailPanel {
       vscode.window.showErrorMessage(`附件预览失败：${errorMessage(error)}`);
       return;
     }
+    const nonce = crypto.randomBytes(16).toString('base64');
     const panel = vscode.window.createWebviewPanel(
       'zentaoAttachmentPreview',
       `附件预览：${attachment.name}`,
       vscode.ViewColumn.Beside,
-      { enableScripts: false, retainContextWhenHidden: true }
+      { enableScripts: true, retainContextWhenHidden: true }
     );
-    panel.webview.html = this.renderAttachmentPreviewHtml(attachment, preview);
+    panel.webview.onDidReceiveMessage(async (rawMessage: unknown) => {
+      const message = asMessageRecord(rawMessage);
+      if (message.type === 'exportMarkdown') {
+        await this.exportPreviewMarkdown(attachment, preview);
+      }
+    });
+    panel.webview.html = this.renderAttachmentPreviewHtml(attachment, preview, nonce);
   }
 
   private renderAttachmentPreviewHtml(
     attachment: DetailViewModel['attachments'][number],
-    preview: Awaited<ReturnType<typeof renderAttachmentPreview>>
+    preview: Awaited<ReturnType<typeof renderAttachmentPreview>>,
+    nonce: string
   ): string {
     return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(attachment.name)}</title>
   <style>
@@ -189,15 +197,175 @@ export class DetailPanel {
     th, td { border: 1px solid var(--vscode-panel-border); padding: 6px 8px; text-align: left; }
     th { background: var(--vscode-editor-background); }
     pre { overflow: auto; padding: 8px; border: 1px solid var(--vscode-panel-border); }
+    button { color: var(--vscode-button-foreground); background: var(--vscode-button-background); border: 0; border-radius: 3px; padding: 5px 10px; cursor: pointer; }
+    button:hover { background: var(--vscode-button-hoverBackground); }
+    .detail-actions { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+    .search-panel[hidden] { display: none; }
+    .search-panel { position: sticky; top: 0; z-index: 5; display: flex; gap: 8px; align-items: center; margin-bottom: 12px; padding: 8px; border: 1px solid var(--vscode-panel-border); background: var(--vscode-editor-background); }
+    .search-panel input { flex: 1; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border); padding: 4px 6px; }
+    .search-panel button { padding: 3px 6px; font-size: 12px; }
+    mark.search-match { color: var(--vscode-editor-foreground); background: var(--vscode-editor-findMatchHighlightBackground); }
+    mark.search-current { outline: 1px solid var(--vscode-editor-findMatchBorder); background: var(--vscode-editor-findMatchBackground); }
   </style>
 </head>
 <body>
+  <div class="search-panel" data-search-panel hidden>
+    <label for="zentao-preview-search">Ctrl+F</label>
+    <input id="zentao-preview-search" data-search-input type="text" placeholder="搜索">
+    <span data-search-count>0/0</span>
+    <button type="button" data-search-prev title="上一个 (Shift+Enter)">&#x25B2;</button>
+    <button type="button" data-search-next title="下一个 (Enter)">&#x25BC;</button>
+    <button type="button" data-close-search>关闭</button>
+  </div>
+  <div class="detail-actions"><button type="button" data-export-markdown>导出 MD</button></div>
   <h1>${escapeHtml(preview.title || attachment.name)}</h1>
   <section><h2>附件信息</h2>${preview.metadataHtml}</section>
   <section><h2>预览内容</h2>${preview.html}</section>
   <details><summary>原始字段</summary><pre>${preview.rawJsonHtml}</pre></details>
+  <script nonce="${nonce}">
+    const vscode = acquireVsCodeApi();
+    document.querySelector('[data-export-markdown]')?.addEventListener('click', () => {
+      vscode.postMessage({ type: 'exportMarkdown' });
+    });
+
+    const searchPanel = document.querySelector('[data-search-panel]');
+    const searchInput = document.querySelector('[data-search-input]');
+    const searchCount = document.querySelector('[data-search-count]');
+    const closeSearchButton = document.querySelector('[data-close-search]');
+    let searchMatches = [];
+    let currentSearchIndex = -1;
+
+    function clearSearchHighlights() {
+      document.querySelectorAll('mark.search-match').forEach((mark) => {
+        mark.replaceWith(document.createTextNode(mark.textContent || ''));
+      });
+      document.body.normalize();
+      searchMatches = [];
+      currentSearchIndex = -1;
+      updateSearchCount();
+    }
+
+    function updateSearchCount() {
+      if (searchCount) {
+        searchCount.textContent = searchMatches.length ? String(currentSearchIndex + 1) + '/' + String(searchMatches.length) : '0/0';
+      }
+    }
+
+    function collectTextNodes(root) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          const parent = node.parentElement;
+          if (!parent || parent.closest('script, style, [data-search-panel]')) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          return node.nodeValue && node.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+        }
+      });
+      const nodes = [];
+      while (walker.nextNode()) { nodes.push(walker.currentNode); }
+      return nodes;
+    }
+
+    function runSearch(query) {
+      clearSearchHighlights();
+      if (!query) return;
+      const lowerQuery = query.toLocaleLowerCase();
+      collectTextNodes(document.body).forEach((node) => {
+        const text = node.nodeValue || '';
+        const lowerText = text.toLocaleLowerCase();
+        let start = 0;
+        const fragment = document.createDocumentFragment();
+        let matched = false;
+        while (true) {
+          const index = lowerText.indexOf(lowerQuery, start);
+          if (index === -1) break;
+          matched = true;
+          fragment.append(document.createTextNode(text.slice(start, index)));
+          const mark = document.createElement('mark');
+          mark.className = 'search-match';
+          mark.textContent = text.slice(index, index + query.length);
+          fragment.append(mark);
+          searchMatches.push(mark);
+          start = index + query.length;
+        }
+        if (matched) {
+          fragment.append(document.createTextNode(text.slice(start)));
+          node.replaceWith(fragment);
+        }
+      });
+      if (searchMatches.length) { currentSearchIndex = 0; focusSearchMatch(0); }
+      updateSearchCount();
+    }
+
+    function focusSearchMatch(index) {
+      searchMatches.forEach((m) => m.classList.remove('search-current'));
+      const match = searchMatches[index];
+      if (match) { match.classList.add('search-current'); match.scrollIntoView({ block: 'center' }); }
+      updateSearchCount();
+    }
+
+    function moveSearch(delta) {
+      if (!searchMatches.length) return;
+      currentSearchIndex = (currentSearchIndex + delta + searchMatches.length) % searchMatches.length;
+      focusSearchMatch(currentSearchIndex);
+    }
+
+    function openSearch() { searchPanel?.removeAttribute('hidden'); searchInput?.focus(); if (searchInput?.value) runSearch(searchInput.value); }
+    function closeSearch() { searchPanel?.setAttribute('hidden', ''); if (searchInput) searchInput.value = ''; clearSearchHighlights(); }
+
+    searchInput?.addEventListener('input', () => runSearch(searchInput.value));
+    searchInput?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); moveSearch(event.shiftKey ? -1 : 1); } });
+    closeSearchButton?.addEventListener('click', closeSearch);
+    document.querySelector('[data-search-prev]')?.addEventListener('click', () => moveSearch(-1));
+    document.querySelector('[data-search-next]')?.addEventListener('click', () => moveSearch(1));
+
+    document.addEventListener('keydown', (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); openSearch(); return; }
+      if (event.key === 'Escape') { closeSearch(); }
+    });
+  </script>
 </body>
 </html>`;
+  }
+
+  private async exportPreviewMarkdown(
+    attachment: DetailViewModel['attachments'][number],
+    preview: Awaited<ReturnType<typeof renderAttachmentPreview>>
+  ): Promise<void> {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      vscode.window.showWarningMessage('请先打开一个工作区，再导出 MD 文件。');
+      return;
+    }
+
+    try {
+      const directory = vscode.Uri.joinPath(workspaceFolder.uri, 'requirements');
+      await vscode.workspace.fs.createDirectory(directory);
+      const baseName = attachment.name.replace(/\.[^.]+$/, '');
+      const fileName = `${baseName}.md`;
+      const target = await this.nextAvailableMarkdownUri(directory, fileName);
+
+      const lines: string[] = [`# ${attachment.name}`, ''];
+      if (attachment.size) { lines.push(`- **大小**：${attachment.size}`); }
+      if (attachment.addedDate) { lines.push(`- **添加时间**：${attachment.addedDate}`); }
+      lines.push('', '## 预览内容', '');
+
+      // Strip HTML tags for a plain-text markdown export
+      const textContent = preview.html
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/?(p|div|section|h[1-6]|tr)[^>]*>/gi, '\n')
+        .replace(/<\/?(td|th)[^>]*>/gi, ' | ')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+      lines.push(textContent);
+
+      await vscode.workspace.fs.writeFile(target, Buffer.from(lines.join('\n'), 'utf8'));
+      vscode.window.showInformationMessage(`预览已导出：${vscode.workspace.asRelativePath(target)}`);
+    } catch (error) {
+      vscode.window.showErrorMessage(`导出 MD 失败：${errorMessage(error)}`);
+    }
   }
 
   private async nextAvailableMarkdownUri(directory: vscode.Uri, fileName: string): Promise<vscode.Uri> {

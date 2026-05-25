@@ -284,9 +284,11 @@ describe('DetailPanel', () => {
       'zentaoAttachmentPreview',
       '附件预览：notes.txt',
       2,
-      { enableScripts: false, retainContextWhenHidden: true }
+      { enableScripts: true, retainContextWhenHidden: true }
     );
     expect(previewWebview.html).toContain('notes.txt');
     expect(previewWebview.html).toContain('Hello preview');
+    expect(previewWebview.html).toContain('data-search-panel');
+    expect(previewWebview.html).toContain('data-export-markdown');
   });
 });
