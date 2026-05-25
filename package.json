@@ -11,6 +11,9 @@
     "Other"
   ],
   "main": "./out/extension.js",
+  "activationEvents": [
+    "onView:zentaoProjectView"
+  ],
   "contributes": {
     "configuration": {
       "title": "ZenTao",
