@@ -23,6 +23,15 @@ export class AttachmentService {
   }
 
   async readBytes(attachment: AttachmentViewModel): Promise<Uint8Array | undefined> {
+    // Prefer classic file-read URL (avoids REST API 403 on file endpoints)
+    if (attachment.id) {
+      try {
+        return await this.getClient().downloadFile(attachment.id);
+      } catch {
+        // Fall through to API path
+      }
+    }
+
     const requestPath = this.downloadPath(attachment);
     if (!requestPath) {
       vscode.window.showWarningMessage('当前附件缺少可下载地址。');

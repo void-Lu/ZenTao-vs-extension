@@ -101,6 +101,26 @@ export class ZenTaoClient {
     return new Uint8Array(buf);
   }
 
+  async downloadFile(fileId: number): Promise<Uint8Array> {
+    const base = this.options.baseUrl.replace(/\/api\.php\/v1\/?$/i, '/');
+    const baseUrl = base.endsWith('/') ? base : `${base}/`;
+    const token = await this.options.getToken();
+    const url = `${baseUrl}file-read-${fileId}.json?zentaosid=${encodeURIComponent(token || '')}`;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs);
+    try {
+      const response = await this.fetchImpl(url, { method: 'GET', signal: controller.signal });
+      if (!response.ok) {
+        throw new ZenTaoApiError(`ZenTao file download failed with status ${response.status}`, response.status, `file-read-${fileId}`);
+      }
+      const buf = await response.arrayBuffer();
+      return new Uint8Array(buf);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   private buildUrl(path: string): string {
     let normalizedPath = path.replace(/^\/+/, '');
     normalizedPath = normalizedPath.replace(/^api\.php\/v1\/?/i, '');
