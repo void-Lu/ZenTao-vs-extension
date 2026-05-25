@@ -22,6 +22,13 @@ vi.mock('vscode', () => ({
 }));
 
 vi.mock('./html', () => ({
+  escapeHtml: (value: unknown) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;'),
+  sanitizeRichHtml: (value: unknown) => String(value ?? ''),
   renderDetailHtml: vi.fn(() => '<html></html>')
 }));
 
@@ -41,6 +48,10 @@ function detail(id: number, type: 'story' | 'task' = 'story') {
     activities: [],
     raw: {}
   };
+}
+
+function attachmentServiceFake() {
+  return { download: vi.fn(), downloadImage: vi.fn(), readBytes: vi.fn() };
 }
 
 describe('DetailPanel', () => {
@@ -72,7 +83,7 @@ describe('DetailPanel', () => {
       dispose: secondDispose
     });
     const { DetailPanel } = await import('./detailPanel');
-    const panel = new DetailPanel({} as any, {} as any);
+    const panel = new DetailPanel({} as any, attachmentServiceFake() as any, vi.fn());
 
     panel.show(detail(1));
     panel.show(detail(2, 'task'));
@@ -92,7 +103,7 @@ describe('DetailPanel', () => {
       dispose: vi.fn()
     });
     const { DetailPanel } = await import('./detailPanel');
-    const panel = new DetailPanel({} as any, {} as any);
+    const panel = new DetailPanel({} as any, attachmentServiceFake() as any, vi.fn());
 
     panel.show(detail(1));
     expect(panel.isOpen()).toBe(true);
@@ -120,7 +131,7 @@ describe('DetailPanel', () => {
     };
     createWebviewPanel.mockReturnValueOnce(firstPanel).mockReturnValueOnce(secondPanel);
     const { DetailPanel } = await import('./detailPanel');
-    const panel = new DetailPanel({} as any, {} as any);
+    const panel = new DetailPanel({} as any, attachmentServiceFake() as any, vi.fn());
 
     panel.show(detail(1));
     panel.show(detail(2, 'task'));
@@ -147,9 +158,9 @@ describe('DetailPanel', () => {
     });
     const attachment = { id: 7, name: 'spec.docx', addedDate: '2026-05-21', raw: {} };
     const otherAttachment = { id: 8, name: 'image.png', addedDate: '2026-05-22', raw: {} };
-    const attachmentService = { download: vi.fn() };
+    const attachmentService = attachmentServiceFake();
     const { DetailPanel } = await import('./detailPanel');
-    const panel = new DetailPanel({} as any, attachmentService as any);
+    const panel = new DetailPanel({} as any, attachmentService as any, vi.fn());
 
     panel.show({ ...detail(1), attachments: [attachment] });
     panel.show({ ...detail(2, 'task'), attachments: [otherAttachment] });
@@ -173,9 +184,9 @@ describe('DetailPanel', () => {
       reveal: vi.fn(),
       dispose: vi.fn()
     });
-    const attachmentService = { download: vi.fn(), downloadImage: vi.fn() };
+    const attachmentService = attachmentServiceFake();
     const { DetailPanel } = await import('./detailPanel');
-    const panel = new DetailPanel({} as any, attachmentService as any);
+    const panel = new DetailPanel({} as any, attachmentService as any, vi.fn());
 
     panel.show(detail(1));
     await messageHandlers[0]?.({ type: 'downloadImage', src: 'https://zentao.example.com/file.png' });
@@ -204,11 +215,79 @@ describe('DetailPanel', () => {
     });
     writeFile.mockRejectedValue(new Error('disk full'));
     const { DetailPanel } = await import('./detailPanel');
-    const panel = new DetailPanel({} as any, { download: vi.fn(), downloadImage: vi.fn() } as any);
+    const panel = new DetailPanel({} as any, attachmentServiceFake() as any, vi.fn());
 
     panel.show(detail(1));
     await messageHandlers[0]?.({ type: 'exportMarkdown' });
 
     expect(showErrorMessage).toHaveBeenCalledWith('导出 MD 失败：disk full');
+  });
+
+  it('opens linked story and task details from webview messages', async () => {
+    const messageHandlers: Array<(message: { type?: string; itemType?: string; id?: number }) => Promise<void>> = [];
+    createWebviewPanel.mockReturnValue({
+      title: '',
+      webview: {
+        cspSource: 'vscode-resource:',
+        onDidReceiveMessage: vi.fn((handler: (message: { type?: string; itemType?: string; id?: number }) => Promise<void>) => { messageHandlers.push(handler); }),
+        html: ''
+      },
+      onDidDispose: vi.fn(),
+      reveal: vi.fn(),
+      dispose: vi.fn()
+    });
+    const openDetail = vi.fn();
+    const { DetailPanel } = await import('./detailPanel');
+    const panel = new DetailPanel({} as any, attachmentServiceFake() as any, openDetail);
+
+    panel.show(detail(1));
+    await messageHandlers[0]?.({ type: 'openDetail', itemType: 'story', id: 101 });
+    await messageHandlers[0]?.({ type: 'openDetail', itemType: 'bug', id: 102 });
+
+    expect(openDetail).toHaveBeenCalledOnce();
+    expect(openDetail).toHaveBeenCalledWith('story', 101);
+  });
+
+  it('previews attachments from the detail that owns the posting webview', async () => {
+    const messageHandlers: Array<(message: { type?: string; index?: number }) => Promise<void>> = [];
+    const detailWebview = {
+      cspSource: 'vscode-resource:',
+      onDidReceiveMessage: vi.fn((handler: (message: { type?: string; index?: number }) => Promise<void>) => { messageHandlers.push(handler); }),
+      html: ''
+    };
+    const previewWebview = { cspSource: 'vscode-resource:', onDidReceiveMessage: vi.fn(), html: '' };
+    const previewReveal = vi.fn();
+    createWebviewPanel.mockReturnValueOnce({
+      title: '',
+      webview: detailWebview,
+      onDidDispose: vi.fn(),
+      reveal: vi.fn(),
+      dispose: vi.fn()
+    }).mockReturnValueOnce({
+      title: '',
+      webview: previewWebview,
+      onDidDispose: vi.fn(),
+      reveal: previewReveal,
+      dispose: vi.fn()
+    });
+    const attachment = { id: 7, name: 'notes.txt', addedDate: '2026-05-25', raw: { id: 7, name: 'notes.txt' } };
+    const attachmentService = attachmentServiceFake();
+    attachmentService.readBytes.mockResolvedValue(Buffer.from('Hello preview', 'utf8'));
+    const { DetailPanel } = await import('./detailPanel');
+    const panel = new DetailPanel({} as any, attachmentService as any, vi.fn());
+
+    panel.show({ ...detail(1), attachments: [attachment] });
+    await messageHandlers[0]?.({ type: 'previewAttachment', index: 0 });
+
+    expect(attachmentService.readBytes).toHaveBeenCalledWith(attachment);
+    expect(createWebviewPanel).toHaveBeenCalledWith(
+      'zentaoAttachmentPreview',
+      '附件预览：notes.txt',
+      1,
+      { enableScripts: false, retainContextWhenHidden: true }
+    );
+    expect(previewWebview.html).toContain('notes.txt');
+    expect(previewWebview.html).toContain('Hello preview');
+    expect(previewReveal).toHaveBeenCalledWith(1);
   });
 });

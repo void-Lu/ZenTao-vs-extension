@@ -1,9 +1,10 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
+import { renderAttachmentPreview } from './attachmentPreview';
 import { AttachmentService } from './attachmentService';
-import { renderDetailHtml } from './html';
+import { escapeHtml, renderDetailHtml } from './html';
 import { detailToMarkdown, markdownFileName } from './markdownExport';
-import { DetailViewModel } from './types';
+import { DetailViewModel, ZenTaoItemType } from './types';
 
 interface DetailPanelState {
   panel: vscode.WebviewPanel;
@@ -13,10 +14,16 @@ interface DetailPanelState {
 type DetailPanelMessage =
   | { type: 'downloadAttachment'; index: number }
   | { type: 'downloadImage'; src: string }
-  | { type: 'exportMarkdown' };
+  | { type: 'exportMarkdown' }
+  | { type: 'previewAttachment'; index: number }
+  | { type: 'openDetail'; itemType: ZenTaoItemType; id: number };
 
 function asMessageRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? value as Record<string, unknown> : {};
+}
+
+function isZenTaoItemType(value: unknown): value is ZenTaoItemType {
+  return value === 'story' || value === 'task';
 }
 
 function parseDetailPanelMessage(value: unknown): DetailPanelMessage | undefined {
@@ -30,6 +37,17 @@ function parseDetailPanelMessage(value: unknown): DetailPanelMessage | undefined
   if (message.type === 'exportMarkdown') {
     return { type: 'exportMarkdown' };
   }
+  if (message.type === 'previewAttachment' && typeof message.index === 'number') {
+    return { type: 'previewAttachment', index: message.index };
+  }
+  if (
+    message.type === 'openDetail'
+    && isZenTaoItemType(message.itemType)
+    && typeof message.id === 'number'
+    && Number.isFinite(message.id)
+  ) {
+    return { type: 'openDetail', itemType: message.itemType, id: message.id };
+  }
   return undefined;
 }
 
@@ -42,7 +60,10 @@ export class DetailPanel {
 
   constructor(
     private readonly extensionUri: vscode.Uri,
-    private readonly attachmentService: AttachmentService
+    private readonly attachmentService: AttachmentService,
+    private readonly openDetail: (type: ZenTaoItemType, id: number) => Promise<void> = async (type, id) => {
+      await vscode.commands.executeCommand('zentao.openDetail', type, id);
+    }
   ) {}
 
   show(detail: DetailViewModel): void {
@@ -75,6 +96,13 @@ export class DetailPanel {
           await this.attachmentService.downloadImage(message.src);
         } else if (message.type === 'exportMarkdown') {
           await this.exportMarkdown(createdState.detail);
+        } else if (message.type === 'previewAttachment') {
+          const attachment = createdState.detail.attachments[message.index];
+          if (attachment) {
+            await this.previewAttachment(attachment);
+          }
+        } else if (message.type === 'openDetail') {
+          await this.openDetail(message.itemType, message.id);
         }
       });
     } else {
@@ -118,6 +146,53 @@ export class DetailPanel {
     } catch (error) {
       vscode.window.showErrorMessage(`导出 MD 失败：${errorMessage(error)}`);
     }
+  }
+
+  private async previewAttachment(attachment: DetailViewModel['attachments'][number]): Promise<void> {
+    const bytes = await this.attachmentService.readBytes(attachment);
+    if (!bytes) {
+      return;
+    }
+
+    const preview = await renderAttachmentPreview(attachment, Buffer.from(bytes));
+    const panel = vscode.window.createWebviewPanel(
+      'zentaoAttachmentPreview',
+      `附件预览：${attachment.name}`,
+      vscode.ViewColumn.One,
+      { enableScripts: false, retainContextWhenHidden: true }
+    );
+    panel.webview.html = this.renderAttachmentPreviewHtml(attachment, preview);
+    panel.reveal(vscode.ViewColumn.One);
+  }
+
+  private renderAttachmentPreviewHtml(
+    attachment: DetailViewModel['attachments'][number],
+    preview: Awaited<ReturnType<typeof renderAttachmentPreview>>
+  ): string {
+    return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(attachment.name)}</title>
+  <style>
+    body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 16px; }
+    h1 { font-size: 20px; margin: 0 0 12px; }
+    h2 { font-size: 15px; margin: 18px 0 8px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 12px; }
+    th, td { border: 1px solid var(--vscode-panel-border); padding: 6px 8px; text-align: left; }
+    th { background: var(--vscode-editor-background); }
+    pre { overflow: auto; padding: 8px; border: 1px solid var(--vscode-panel-border); }
+  </style>
+</head>
+<body>
+  <h1>${escapeHtml(preview.title || attachment.name)}</h1>
+  <section><h2>附件信息</h2>${preview.metadataHtml}</section>
+  <section><h2>预览内容</h2>${preview.html}</section>
+  <details><summary>原始字段</summary><pre>${preview.rawJsonHtml}</pre></details>
+</body>
+</html>`;
   }
 
   private async nextAvailableMarkdownUri(directory: vscode.Uri, fileName: string): Promise<vscode.Uri> {
