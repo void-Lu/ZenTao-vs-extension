@@ -223,7 +223,10 @@ export function activate(context: vscode.ExtensionContext): void {
     const raw = target.type === 'story' ? await getClient().getStory(target.id) : await getClient().getTask(target.id);
     const detail = toDetailViewModel(target.type, raw);
     if (!detailPanel) {
-      detailPanel = new DetailPanel(context.extensionUri, new AttachmentService(getClient));
+      const attachmentService = new AttachmentService(getClient);
+      detailPanel = new DetailPanel(context.extensionUri, attachmentService, async (linkedType, linkedId) => {
+        await openDetail(linkedType, linkedId);
+      });
     }
     detailPanel.show(detail);
   }

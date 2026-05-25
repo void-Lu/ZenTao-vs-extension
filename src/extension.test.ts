@@ -453,8 +453,12 @@ describe('extension scaffold', () => {
     const commands = new Map<string, (...args: unknown[]) => unknown>();
     const treeStates: unknown[] = [];
     const closedDetails: string[] = [];
+    let capturedOpenDetail: ((type: 'story' | 'task', id: number) => Promise<void>) | undefined;
     vi.doMock('./detailPanel', () => ({
       DetailPanel: class {
+        constructor(_extensionUri: unknown, _attachmentService: unknown, openDetail: (type: 'story' | 'task', id: number) => Promise<void>) {
+          capturedOpenDetail = openDetail;
+        }
         isOpen() { return true; }
         show() {}
         close() { closedDetails.push('closed'); }
@@ -519,6 +523,7 @@ describe('extension scaffold', () => {
 
     extension.activate({ secrets: { get: async (key: string) => key.startsWith('zentao.token') ? 'token-1' : undefined, store: async () => undefined, delete: async () => undefined }, subscriptions: [], extensionUri: {} } as any);
     await commands.get('zentao.openDetail')?.('story', 1);
+    expect(capturedOpenDetail).toBeTypeOf('function');
     await commands.get('zentao.reselectProject')?.();
 
     expect(values.projectId).toBe(2);
@@ -534,6 +539,7 @@ describe('extension scaffold', () => {
     const closedDetails: string[] = [];
     vi.doMock('./detailPanel', () => ({
       DetailPanel: class {
+        constructor(_extensionUri: unknown, _attachmentService: unknown, _openDetail: (type: 'story' | 'task', id: number) => Promise<void>) {}
         isOpen() { return true; }
         show() {}
         close() { closedDetails.push('closed'); }
