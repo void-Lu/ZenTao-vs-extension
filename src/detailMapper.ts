@@ -48,16 +48,16 @@ function displayFirst(raw: AnyRecord, keys: string[]): string {
   return displayValue(firstValue(raw, keys));
 }
 
-function displayTeam(value: unknown): string {
+function displayTeamAccounts(value: unknown): string {
   const members = asArray(value)
-    .map((member) => stringValue(member))
+    .map((member) => stringValue(asRecord(member).account))
     .filter(Boolean);
   return members.length ? members.join(', ') : emptyValue;
 }
 
 function assignedTo(raw: AnyRecord): string {
   if (stringValue(raw.mode).toLowerCase() === 'multi') {
-    return displayTeam(raw.team);
+    return displayTeamAccounts(raw.team);
   }
   return displayFirst(raw, ['assignedToRealName', 'assignedTo']);
 }

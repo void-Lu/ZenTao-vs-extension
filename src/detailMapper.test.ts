@@ -74,9 +74,9 @@ describe('toDetailViewModel', () => {
       assignedTo: 'stale.assignee',
       mode: 'multi',
       team: [
-        { realname: 'Neil Tang' },
+        { account: 'neil.tang', realname: 'Neil Tang' },
         { account: 'gino.lu' },
-        { name: 'Will Liu' }
+        { account: 'will.liu', name: 'Will Liu' }
       ],
       type: '开发',
       status: '进行中',
@@ -113,7 +113,7 @@ describe('toDetailViewModel', () => {
       ['由谁创建', '由谁完成', '由谁取消', '由谁关闭', '关闭原因', '最后编辑']
     ]);
     expect(model.basicFieldGroups[0].fields.find((field) => field.label === '所属模块')?.value).toBe('暂无');
-    expect(model.basicFieldGroups[0].fields.find((field) => field.label === '指派给')?.value).toBe('Neil Tang, gino.lu, Will Liu');
+    expect(model.basicFieldGroups[0].fields.find((field) => field.label === '指派给')?.value).toBe('neil.tang, gino.lu, will.liu');
     expect(model.contentSections.map((section) => section.title)).toEqual(['任务描述', '研发需求描述', '验收标准']);
     expect(model.contentSections[0].html).toBe('暂无');
     expect(model.contentSections[1].html).toContain('<p>需求详情</p>');
