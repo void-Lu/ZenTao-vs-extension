@@ -47,6 +47,37 @@ describe('AttachmentService', () => {
     expect(writes.map((write) => write.bytes)).toEqual([[1], [2]]);
   });
 
+  it('reads attachment bytes without opening a save dialog', async () => {
+    const client = { downloadByPath: vi.fn(async () => new Uint8Array([9, 8, 7])) };
+    const service = new AttachmentService(() => client as unknown as ZenTaoClient);
+
+    const bytes = await service.readBytes({ id: 7, name: 'spec.docx', addedDate: '-', raw: {} });
+
+    expect(bytes).toEqual(new Uint8Array([9, 8, 7]));
+    expect(client.downloadByPath).toHaveBeenCalledWith('files/7');
+    expect(vscode.window.showSaveDialog).not.toHaveBeenCalled();
+  });
+
+  it('reads attachment bytes from API URLs without duplicating the API prefix', async () => {
+    const client = { downloadByPath: vi.fn(async () => new Uint8Array([1, 2])) };
+    const service = new AttachmentService(() => client as unknown as ZenTaoClient);
+
+    await service.readBytes({ name: 'spec.docx', addedDate: '-', url: 'https://zentao.example.com/api.php/v1/files/9', raw: {} });
+
+    expect(client.downloadByPath).toHaveBeenCalledWith('files/9');
+  });
+
+  it('shows a warning when attachment bytes cannot be resolved', async () => {
+    const client = { downloadByPath: vi.fn(async () => new Uint8Array([1])) };
+    const service = new AttachmentService(() => client as unknown as ZenTaoClient);
+
+    const bytes = await service.readBytes({ name: 'missing.bin', addedDate: '-', raw: {} });
+
+    expect(bytes).toBeUndefined();
+    expect(client.downloadByPath).not.toHaveBeenCalled();
+    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith('当前附件缺少可下载地址。');
+  });
+
   it('downloads http images to a selected local file', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,

@@ -13,20 +13,30 @@ export class AttachmentService {
       return;
     }
 
-    const requestPath = attachment.url
-      ? attachment.url.replace(/^.*api\.php\/v1\//, '')
-      : attachment.id
-        ? `files/${attachment.id}`
-        : '';
-
-    if (!requestPath) {
-      vscode.window.showWarningMessage('当前附件缺少可下载地址。');
+    const bytes = await this.readBytes(attachment);
+    if (!bytes) {
       return;
     }
 
-    const bytes = await this.getClient().downloadByPath(requestPath);
     await vscode.workspace.fs.writeFile(target, bytes);
     vscode.window.showInformationMessage(`附件已保存：${path.basename(target.fsPath)}`);
+  }
+
+  async readBytes(attachment: AttachmentViewModel): Promise<Uint8Array | undefined> {
+    const requestPath = this.downloadPath(attachment);
+    if (!requestPath) {
+      vscode.window.showWarningMessage('当前附件缺少可下载地址。');
+      return undefined;
+    }
+
+    return this.getClient().downloadByPath(requestPath);
+  }
+
+  private downloadPath(attachment: AttachmentViewModel): string {
+    if (attachment.url) {
+      return attachment.url.replace(/^.*api\.php\/v1\//, '').replace(/^\/+/, '');
+    }
+    return attachment.id ? `files/${attachment.id}` : '';
   }
 
   async downloadImage(src: string): Promise<void> {
