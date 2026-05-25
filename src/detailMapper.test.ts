@@ -55,7 +55,7 @@ describe('toDetailViewModel', () => {
 
     expect(model.basicFieldGroups.map((group) => group.fields.map((field) => field.label))).toEqual([
       ['由谁创建', '指派给', '评审人员', '评审时间', '由谁关闭', '关闭原因', '最后修改'],
-      ['当前状态', '所处阶段', '类别', '优先级', '预计工时', '关键词', '抄送给']
+      ['当前状态', '所处阶段', '类别', '优先级', '预计工时', '关键词', '抄送给', '关联任务']
     ]);
     expect(model.basicFieldGroups[0].fields.find((field) => field.label === '由谁关闭')?.value).toBe('暂无');
     expect(model.contentSections.map((section) => section.title)).toEqual(['需求描述', '验收标准']);
@@ -123,6 +123,70 @@ describe('toDetailViewModel', () => {
     expect(model.activities[0].contentHtml).not.toContain('不要显示备注');
     expect(model.activities[1].contentHtml).toContain('<p>字段变更描述</p>');
     expect(model.activities[1].contentHtml).not.toContain('script');
+  });
+
+  it('formats task fields and creates a related story link', () => {
+    const model = toDetailViewModel('task', {
+      id: 2068,
+      name: '开发任务',
+      storyID: '101',
+      storyTitle: '供应商付款单功能设计',
+      progress: '17',
+      estimate: '1',
+      consumed: '1h',
+      left: '0工时',
+      realStarted: '2026-05-21 13:42',
+      deadline: '2026-05-30',
+      openedBy: 'john.wang',
+      openedDate: '2026/05/21 11:17:14',
+      desc: '',
+      actions: []
+    });
+
+    const firstGroup = model.basicFieldGroups[0].fields;
+    const secondGroup = model.basicFieldGroups[1].fields;
+    const thirdGroup = model.basicFieldGroups[2].fields;
+
+    expect(firstGroup.find((field) => field.label === '相关研发需求')).toMatchObject({
+      value: '供应商付款单功能设计',
+      linkType: 'story',
+      linkId: 101
+    });
+    expect(firstGroup.find((field) => field.label === '进度')?.value).toBe('17%');
+    expect(secondGroup.find((field) => field.label === '最初预计')?.value).toBe('1h');
+    expect(secondGroup.find((field) => field.label === '总计消耗')?.value).toBe('1h');
+    expect(secondGroup.find((field) => field.label === '预计剩余')?.value).toBe('0工时');
+    expect(secondGroup.find((field) => field.label === '实际开始')?.value).toBe('2026-05-21 13:42:00');
+    expect(secondGroup.find((field) => field.label === '截止日期')?.value).toBe('2026-05-30');
+    expect(thirdGroup.find((field) => field.label === '由谁创建')?.value).toBe('john.wang 于 2026-05-21 11:17:14');
+  });
+
+  it('formats story hours, linked tasks, dates, and attachment sizes', () => {
+    const model = toDetailViewModel('story', {
+      id: 101,
+      title: '需求',
+      estimate: '2',
+      openedBy: 'amy.sun',
+      openedDate: '2026-01-05',
+      tasks: [
+        { id: 2068, name: '前端开发' },
+        { id: '2069', title: '接口联调' }
+      ],
+      files: [
+        { id: 1, title: 'a.txt', size: 2048, addedDate: '2026-05-21 10:18' },
+        { id: 2, title: 'b.pdf', size: '1.5MB', addedDate: '2026-05-22' }
+      ],
+      actions: []
+    });
+
+    expect(model.basicFieldGroups[1].fields.find((field) => field.label === '预计工时')?.value).toBe('2h');
+    expect(model.basicFieldGroups[0].fields.find((field) => field.label === '由谁创建')?.value).toBe('amy.sun 于 2026-01-05');
+    expect(model.basicFieldGroups[1].fields.find((field) => field.label === '关联任务')?.links).toEqual([
+      { type: 'task', id: 2068, text: '前端开发' },
+      { type: 'task', id: 2069, text: '接口联调' }
+    ]);
+    expect(model.attachments.map((attachment) => attachment.size)).toEqual(['2K', '1.5M']);
+    expect(model.attachments.map((attachment) => attachment.addedDate)).toEqual(['2026-05-21 10:18:00', '2026-05-22']);
   });
 });
 

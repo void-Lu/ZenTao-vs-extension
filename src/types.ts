@@ -62,6 +62,8 @@ export interface AttachmentViewModel {
   size?: string;
   addedDate: string;
   url?: string;
+  extension?: string;
+  mimeType?: string;
   raw: unknown;
 }
 
@@ -72,9 +74,18 @@ export interface ActivityViewModel {
   contentHtml: string;
 }
 
+export interface BasicFieldLink {
+  type: ZenTaoItemType;
+  id: number;
+  text: string;
+}
+
 export interface BasicField {
   label: string;
   value: string;
+  linkType?: ZenTaoItemType;
+  linkId?: number;
+  links?: BasicFieldLink[];
 }
 
 export interface BasicFieldGroup {

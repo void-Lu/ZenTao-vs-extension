@@ -23,7 +23,7 @@ describe('markdownExport', () => {
 
     expect(markdown).toContain('# #101 登录/优化: 图片需求');
     expect(markdown).toContain('## 基础字段');
-    expect(markdown).toContain('- **当前状态**：激活');
+    expect(markdown).toContain('| 当前状态 | 激活 |');
     expect(markdown).toContain('## 需求描述');
     expect(markdown).toContain('[链接](https://zentao.example.com/story/101)');
     expect(markdown).toContain('![截图](https://zentao.example.com/file.png)');
@@ -35,5 +35,15 @@ describe('markdownExport', () => {
 
   it('creates a Windows-safe markdown file name', () => {
     expect(markdownFileName(detail())).toBe('story-101-登录_优化_ 图片需求.md');
+  });
+
+  it('exports linked basic fields as plain text', () => {
+    const markdown = detailToMarkdown({
+      ...detail(),
+      basicFieldGroups: [{ fields: [{ label: '相关研发需求', value: '需求 A', linkType: 'story', linkId: 101 }] }]
+    });
+
+    expect(markdown).toContain('| 相关研发需求 | 需求 A |');
+    expect(markdown).not.toContain('linkType');
   });
 });

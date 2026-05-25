@@ -48,6 +48,82 @@ function displayFirst(raw: AnyRecord, keys: string[]): string {
   return displayValue(firstValue(raw, keys));
 }
 
+function numberValue(value: unknown): number | undefined {
+  const raw = stringValue(value).trim();
+  if (!raw) {
+    return undefined;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function dateTimeValue(value: unknown): string {
+  const raw = stringValue(value).trim();
+  if (!raw || raw === '0000-00-00' || raw === '0000-00-00 00:00:00') {
+    return '';
+  }
+  const match = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  if (!match) {
+    return raw;
+  }
+  const [, year, month, day, hour, minute, second] = match;
+  const date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  if (hour === undefined || minute === undefined) {
+    return date;
+  }
+  return `${date} ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}:${(second ?? '0').padStart(2, '0')}`;
+}
+
+function displayDateFirst(raw: AnyRecord, keys: string[]): string {
+  return displayValue(dateTimeValue(firstValue(raw, keys)));
+}
+
+function displayHoursFirst(raw: AnyRecord, keys: string[]): string {
+  const value = displayFirst(raw, keys);
+  if (value === emptyValue || /(?:\d)\s*(?:h|H|工时|小时)\b/.test(value) || /(?:工时|小时)$/.test(value)) {
+    return value;
+  }
+  return `${value}h`;
+}
+
+function displayProgress(raw: AnyRecord): string {
+  const value = displayFirst(raw, ['progress']);
+  if (value === emptyValue || value.includes('%')) {
+    return value;
+  }
+  return `${value}%`;
+}
+
+function displayAttachmentSize(value: unknown): string {
+  const raw = stringValue(value).trim();
+  if (!raw) {
+    return '';
+  }
+  const match = raw.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/);
+  if (!match) {
+    return raw;
+  }
+  const amount = Number(match[1]);
+  const unit = match[2].toLowerCase();
+  if (!Number.isFinite(amount)) {
+    return raw;
+  }
+  if (!unit || unit === 'b' || unit === 'byte' || unit === 'bytes') {
+    return `${formatNumber(amount / 1024)}K`;
+  }
+  if (unit === 'k' || unit === 'kb') {
+    return `${formatNumber(amount)}K`;
+  }
+  if (unit === 'm' || unit === 'mb') {
+    return `${formatNumber(amount)}M`;
+  }
+  return raw;
+}
+
+function formatNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+}
+
 function displayTeamAccounts(value: unknown): string {
   const members = asArray(value)
     .map((member) => stringValue(asRecord(member).account))
@@ -64,7 +140,7 @@ function assignedTo(raw: AnyRecord): string {
 
 function withDate(raw: AnyRecord, nameKeys: string[], dateKeys: string[]): string {
   const name = stringValue(firstValue(raw, nameKeys));
-  const date = stringValue(firstValue(raw, dateKeys));
+  const date = dateTimeValue(firstValue(raw, dateKeys));
   if (name && date) {
     return `${name} 于 ${date}`;
   }
@@ -81,8 +157,34 @@ function priority(value: unknown): string {
   return circled[normalized] ?? raw;
 }
 
-function field(label: string, value: string): BasicField {
-  return { label, value };
+function field(label: string, value: string, extra: Partial<BasicField> = {}): BasicField {
+  return { label, value, ...extra };
+}
+
+function objectId(value: unknown): number | undefined {
+  if (typeof value === 'object' && value !== null) {
+    return numberValue(asRecord(value).id ?? asRecord(value).ID);
+  }
+  return numberValue(value);
+}
+
+function relatedStoryField(raw: AnyRecord): BasicField {
+  const storyRecord = asRecord(raw.story);
+  const id = numberValue(raw.storyID ?? raw.storyId ?? storyRecord.id ?? storyRecord.ID);
+  const title = displayValue(raw.storyTitle ?? raw.storyName ?? storyRecord.title ?? storyRecord.name ?? raw.story);
+  return id ? field('相关研发需求', title, { linkType: 'story', linkId: id }) : field('相关研发需求', title);
+}
+
+function linkedTaskField(raw: AnyRecord): BasicField {
+  const links = [...asArray(raw.tasks), ...asArray(raw.linkedTasks), ...asArray(raw.children)]
+    .map((item) => {
+      const task = asRecord(item);
+      const id = objectId(task.id ?? task.ID ?? item);
+      const text = stringValue(task.name ?? task.title ?? (id ? `#${id}` : ''));
+      return id && text ? { type: 'task' as ZenTaoItemType, id, text } : undefined;
+    })
+    .filter((item): item is { type: ZenTaoItemType; id: number; text: string } => Boolean(item));
+  return links.length ? field('关联任务', links.map((link) => link.text).join('、'), { links }) : field('关联任务', emptyValue);
 }
 
 function storyBasicFieldGroups(raw: AnyRecord): BasicFieldGroup[] {
@@ -92,7 +194,7 @@ function storyBasicFieldGroups(raw: AnyRecord): BasicFieldGroup[] {
         field('由谁创建', withDate(raw, ['openedBy', 'createdBy'], ['openedDate', 'createdDate'])),
         field('指派给', withDate(raw, ['assignedToRealName', 'assignedTo'], ['assignedDate'])),
         field('评审人员', displayFirst(raw, ['reviewedBy', 'reviewer'])),
-        field('评审时间', displayFirst(raw, ['reviewedDate', 'reviewDate'])),
+        field('评审时间', displayDateFirst(raw, ['reviewedDate', 'reviewDate'])),
         field('由谁关闭', withDate(raw, ['closedBy'], ['closedDate'])),
         field('关闭原因', displayFirst(raw, ['closedReason', 'closeReason'])),
         field('最后修改', withDate(raw, ['lastEditedBy', 'editedBy'], ['lastEditedDate', 'editedDate']))
@@ -104,9 +206,10 @@ function storyBasicFieldGroups(raw: AnyRecord): BasicFieldGroup[] {
         field('所处阶段', displayFirst(raw, ['stage'])),
         field('类别', displayFirst(raw, ['category', 'type'])),
         field('优先级', priority(firstValue(raw, ['pri', 'priority']))),
-        field('预计工时', displayFirst(raw, ['estimate', 'estimatedHours'])),
+        field('预计工时', displayHoursFirst(raw, ['estimate', 'estimatedHours'])),
         field('关键词', displayFirst(raw, ['keywords', 'keywordsText'])),
-        field('抄送给', displayFirst(raw, ['mailto', 'mailTo', 'cc']))
+        field('抄送给', displayFirst(raw, ['mailto', 'mailTo', 'cc'])),
+        linkedTaskField(raw)
       ]
     }
   ];
@@ -118,24 +221,24 @@ function taskBasicFieldGroups(raw: AnyRecord): BasicFieldGroup[] {
       fields: [
         field('所属执行', displayFirst(raw, ['executionName', 'execution'])),
         field('所属模块', displayFirst(raw, ['moduleName', 'module'])),
-        field('相关研发需求', displayFirst(raw, ['storyTitle', 'storyName', 'story'])),
+        relatedStoryField(raw),
         field('指派给', assignedTo(raw)),
         field('任务模式', displayFirst(raw, ['mode'])),
         field('任务类型', displayFirst(raw, ['type'])),
         field('任务状态', displayFirst(raw, ['status'])),
-        field('进度', displayFirst(raw, ['progress'])),
+        field('进度', displayProgress(raw)),
         field('优先级', priority(firstValue(raw, ['pri', 'priority']))),
         field('抄送给', displayFirst(raw, ['mailto', 'mailTo', 'cc']))
       ]
     },
     {
       fields: [
-        field('最初预计', displayFirst(raw, ['estimate', 'estimatedHours'])),
-        field('总计消耗', displayFirst(raw, ['consumed'])),
-        field('预计剩余', displayFirst(raw, ['left', 'remain', 'remaining'])),
-        field('预计开始', displayFirst(raw, ['estStarted', 'estimateStarted'])),
-        field('实际开始', displayFirst(raw, ['realStarted', 'startedDate'])),
-        field('截止日期', displayFirst(raw, ['deadline', 'dueDate']))
+        field('最初预计', displayHoursFirst(raw, ['estimate', 'estimatedHours'])),
+        field('总计消耗', displayHoursFirst(raw, ['consumed'])),
+        field('预计剩余', displayHoursFirst(raw, ['left', 'remain', 'remaining'])),
+        field('预计开始', displayDateFirst(raw, ['estStarted', 'estimateStarted'])),
+        field('实际开始', displayDateFirst(raw, ['realStarted', 'startedDate'])),
+        field('截止日期', displayDateFirst(raw, ['deadline', 'dueDate']))
       ]
     },
     {
@@ -182,9 +285,11 @@ function extractAttachments(raw: AnyRecord): AttachmentViewModel[] {
     return {
       id: Number.isFinite(idValue) ? idValue : undefined,
       name: stringValue(file.title ?? file.name ?? file.filename ?? file.pathname, '未命名附件'),
-      size: stringValue(file.size, ''),
-      addedDate: stringValue(file.addedDate ?? file.addedTime ?? file.date ?? file.openedDate, '未知'),
+      size: displayAttachmentSize(file.size),
+      addedDate: dateTimeValue(file.addedDate ?? file.addedTime ?? file.date ?? file.openedDate) || '未知',
       url: stringValue(file.url ?? file.webUrl ?? file.downloadUrl, ''),
+      extension: stringValue(file.extension ?? file.ext, ''),
+      mimeType: stringValue(file.type ?? file.mimeType ?? file.contentType, ''),
       raw: file
     };
   });
