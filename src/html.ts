@@ -62,7 +62,7 @@ function renderFieldValue(field: DetailViewModel['basicFieldGroups'][number]['fi
 }
 
 function renderDetailLink(type: string, id: number, text: string): string {
-  return `<a href="#" data-detail-link-type="${escapeHtml(type)}" data-detail-link-id="${escapeHtml(id)}">${escapeHtml(text)}</a>`;
+  return `<a data-detail-link-type="${escapeHtml(type)}" data-detail-link-id="${escapeHtml(id)}">${escapeHtml(text)}</a>`;
 }
 
 export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
@@ -77,7 +77,7 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
 
   const attachments = detail.attachments.length
     ? `<table class="attachment-table"><thead><tr><th>文件名</th><th>大小</th><th>预览</th></tr></thead><tbody>${detail.attachments.map((attachment, index) => `
-      <tr><td><a href="#" data-attachment-index="${index}">${escapeHtml(attachment.name)}</a></td><td>${escapeHtml(attachment.size || '暂无')}</td><td><a href="#" data-preview-attachment-index="${index}">预览</a></td></tr>`).join('')}</tbody></table>`
+      <tr><td><a data-attachment-index="${index}">${escapeHtml(attachment.name)}</a></td><td>${escapeHtml(attachment.size || '暂无')}</td><td><a data-preview-attachment-index="${index}">预览</a></td></tr>`).join('')}</tbody></table>`
     : '<p>暂无附件</p>';
 
   const activities = detail.activities.length
@@ -106,13 +106,15 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
     .attachment-table th { background: var(--vscode-editor-background); }
     .activity-list { padding-left: 22px; }
     li { margin: 8px 0; }
-    a { color: var(--vscode-textLink-foreground); cursor: pointer; }
+    a { color: var(--vscode-textLink-foreground); cursor: pointer; text-decoration: underline; }
+    a:hover { text-decoration: none; }
     button { color: var(--vscode-button-foreground); background: var(--vscode-button-background); border: 0; border-radius: 3px; padding: 5px 10px; cursor: pointer; }
     button:hover { background: var(--vscode-button-hoverBackground); }
     .detail-actions { display: flex; justify-content: flex-end; margin-bottom: 12px; }
     .search-panel[hidden] { display: none; }
     .search-panel { position: sticky; top: 0; z-index: 5; display: flex; gap: 8px; align-items: center; margin-bottom: 12px; padding: 8px; border: 1px solid var(--vscode-panel-border); background: var(--vscode-editor-background); }
     .search-panel input { flex: 1; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border); padding: 4px 6px; }
+    .search-panel button { padding: 3px 6px; font-size: 12px; }
     mark.search-match { color: var(--vscode-editor-foreground); background: var(--vscode-editor-findMatchHighlightBackground); }
     mark.search-current { outline: 1px solid var(--vscode-editor-findMatchBorder); background: var(--vscode-editor-findMatchBackground); }
     pre { overflow: auto; padding: 8px; border: 1px solid var(--vscode-panel-border); }
@@ -131,6 +133,8 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
     <label for="zentao-detail-search">Ctrl+F</label>
     <input id="zentao-detail-search" data-search-input type="text" placeholder="搜索当前详情">
     <span data-search-count>0/0</span>
+    <button type="button" data-search-prev title="上一个 (Shift+Enter)">&#x25B2;</button>
+    <button type="button" data-search-next title="下一个 (Enter)">&#x25BC;</button>
     <button type="button" data-close-search>关闭</button>
   </div>
   <div class="detail-actions"><button type="button" data-export-markdown>导出 MD</button></div>
@@ -337,6 +341,8 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
       }
     });
     closeSearchButton?.addEventListener('click', closeSearch);
+    document.querySelector('[data-search-prev]')?.addEventListener('click', () => moveSearch(-1));
+    document.querySelector('[data-search-next]')?.addEventListener('click', () => moveSearch(1));
 
     document.addEventListener('keydown', (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {

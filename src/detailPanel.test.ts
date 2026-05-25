@@ -18,7 +18,7 @@ vi.mock('vscode', () => ({
   Uri: {
     joinPath: (base: { fsPath: string }, ...parts: string[]) => ({ fsPath: [base.fsPath, ...parts].join('/') })
   },
-  ViewColumn: { One: 1 }
+  ViewColumn: { One: 1, Beside: 2 }
 }));
 
 vi.mock('./html', () => ({
@@ -283,11 +283,10 @@ describe('DetailPanel', () => {
     expect(createWebviewPanel).toHaveBeenCalledWith(
       'zentaoAttachmentPreview',
       '附件预览：notes.txt',
-      1,
+      2,
       { enableScripts: false, retainContextWhenHidden: true }
     );
     expect(previewWebview.html).toContain('notes.txt');
     expect(previewWebview.html).toContain('Hello preview');
-    expect(previewReveal).toHaveBeenCalledWith(1);
   });
 });

@@ -154,15 +154,20 @@ export class DetailPanel {
       return;
     }
 
-    const preview = await renderAttachmentPreview(attachment, Buffer.from(bytes));
+    let preview;
+    try {
+      preview = await renderAttachmentPreview(attachment, Buffer.from(bytes));
+    } catch (error) {
+      vscode.window.showErrorMessage(`附件预览失败：${errorMessage(error)}`);
+      return;
+    }
     const panel = vscode.window.createWebviewPanel(
       'zentaoAttachmentPreview',
       `附件预览：${attachment.name}`,
-      vscode.ViewColumn.One,
+      vscode.ViewColumn.Beside,
       { enableScripts: false, retainContextWhenHidden: true }
     );
     panel.webview.html = this.renderAttachmentPreviewHtml(attachment, preview);
-    panel.reveal(vscode.ViewColumn.One);
   }
 
   private renderAttachmentPreviewHtml(
