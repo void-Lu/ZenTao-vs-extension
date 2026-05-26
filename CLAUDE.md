@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run watch` — run TypeScript in watch mode for extension development.
 - `npm test` — run all Vitest tests with `vitest run`.
 - `npm run verify` — compile and run the full test suite.
-- `npx @vscode/vsce package --allow-missing-repository --skip-license` — compile and create a local `.vsix` package. The repository currently has no `repository` metadata or license file, so keep these flags unless those files are added.
+- `npx @vscode/vsce package --allow-missing-repository --skip-license` — compile (via `vscode:prepublish` hook) and create a local `.vsix` package. The repository currently has no `repository` metadata or license file, so keep these flags unless those files are added.
 - `npx vitest run src/zentaoClient.test.ts` — run one test file.
 - `npx vitest run -t "test name"` — run tests matching a name filter.
 - `npx vitest run src/extension.test.ts -t "not extensible" --reporter=verbose` — run a focused test with verbose output.
@@ -31,12 +31,13 @@ The main data flow is:
 4. `src/zentaoClient.ts` builds ZenTao REST API URLs, injects tokens, logs requests, handles timeouts, supports pagination via `getAll`, and downloads attachment bytes.
 5. `src/loadProjectData.ts` loads the configured project, executions, execution tasks, and product stories inferred from project/execution/task product IDs, then maps raw ZenTao responses into tree state. Task loading tolerates partial execution failures.
 6. `src/treeProvider.ts` renders that state as one project node with story and task groups. `src/treeTransform.ts` applies the current filter text and sort mode before nodes are shown.
-7. Story/task nodes invoke `zentao.openDetail`, which fetches fresh raw data, maps it through `src/detailMapper.ts`, and shows it in `src/detailPanel.ts`.
-8. `src/html.ts` renders the detail webview HTML. It escapes plain text, sanitizes ZenTao rich HTML with `sanitize-html`, applies a nonce-based CSP, redacts sensitive raw JSON, and wires webview messages for attachment download, image download, image preview, and Markdown export.
-9. `src/detailPanel.ts` validates webview messages, routes attachment/image downloads through `src/attachmentService.ts`, and writes Markdown exports into the workspace root `requirements/` folder.
+7. Story/task nodes invoke `zentao.openDetail`, which fetches fresh raw data, maps it through `src/detailMapper.ts`, and shows it in `src/detailPanel.ts`. The mapper normalizes progress percentages, work-hour units, date-time formats, attachment sizes, and internal links for related stories/tasks.
+8. `src/html.ts` renders the detail webview HTML. It escapes plain text, sanitizes ZenTao rich HTML with `sanitize-html`, applies a nonce-based CSP, redacts sensitive raw JSON, renders internal detail links, attachment preview columns, in-page search UI (Ctrl+F/Cmd+F), and wires webview messages for attachment download, image download, image preview, attachment preview, and Markdown export.
+9. `src/detailPanel.ts` validates webview messages, routes attachment/image downloads through `src/attachmentService.ts`, handles internal detail navigation (`openDetail`), creates attachment preview panels via `src/attachmentPreview.ts`, and writes Markdown exports into the workspace root `requirements/` folder.
 10. `src/markdownExport.ts` converts the displayed detail view model content to Markdown without including the complete raw response.
-11. `src/attachmentService.ts` resolves attachment download paths, downloads supported rich-content images, and saves files through the VS Code save dialog.
+11. `src/attachmentService.ts` resolves attachment download paths, downloads supported rich-content images, saves files through the VS Code save dialog, and provides `readBytes()` for programmatic attachment byte access without a save dialog.
 12. `src/requestLogger.ts` writes redacted request diagnostics to the `ZenTao Requests` output channel.
+13. `src/attachmentPreview.ts` parses attachment bytes for Excel (.xlsx/.xls), Word (.docx), PDF, TXT, and Markdown files, producing sanitized preview HTML. Heavy dependencies (`mammoth`, `pdf-parse`, `read-excel-file`, `markdown-it`) are lazy-loaded to avoid blocking extension activation.
 
 Shared types are centralized in `src/types.ts`. Tests are colocated as `src/**/*.test.ts`; many files define small interfaces so tests can use VS Code-like fakes without running inside an extension host.
 
@@ -46,6 +47,7 @@ Shared types are centralized in `src/types.ts`. Tests are colocated as `src/**/*
 - Preserve secret redaction in request logs and raw detail JSON when changing `src/requestLogger.ts`, `src/html.ts`, or `src/detailMapper.ts`.
 - Keep webview content sanitized and escaped when changing `src/html.ts`; ZenTao rich-text fields are external input.
 - Keep webview scripts nonce-bound and compatible with the existing CSP.
-- Validate webview message payloads in `src/detailPanel.ts` before invoking download or export actions.
+- Validate webview message payloads in `src/detailPanel.ts` before invoking download, preview, or export actions.
+- Attachment preview content is untrusted input; all preview HTML must be escaped or sanitized before rendering. Preview panels use the same nonce-bound CSP as detail pages.
 - Markdown exports should include only displayed detail content and must not include the complete raw response.
 - Keep credentials in VS Code Secret Storage; ordinary VS Code configuration should only hold the base URL, project ID, and timeout.

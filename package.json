@@ -165,7 +165,8 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "test": "vitest run",
-    "verify": "npm run compile && npm test"
+    "verify": "npm run compile && npm test",
+    "vscode:prepublish": "npm run compile"
   },
   "dependencies": {
     "mammoth": "^1.12.0",
