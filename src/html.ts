@@ -122,10 +122,14 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
     .rich-content th, .rich-content td { border: 1px solid var(--vscode-panel-border); padding: 4px 6px; }
     .rich-content img { max-width: 100%; cursor: zoom-in; }
     .image-modal[hidden] { display: none; }
-    .image-modal { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.72); padding: 24px; }
-    .image-modal-content { max-width: 96vw; max-height: 96vh; display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
-    .image-modal-actions { display: flex; gap: 8px; }
-    .image-modal img { max-width: 96vw; max-height: 84vh; object-fit: contain; background: var(--vscode-editor-background); }
+    .image-modal { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.72); }
+    .image-modal-content { position: relative; display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
+    .image-modal-actions { display: flex; gap: 6px; align-items: center; background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); border-radius: 6px; padding: 4px 8px; }
+    .image-modal-actions button { font-size: 12px; padding: 3px 8px; min-width: 24px; text-align: center; }
+    .zoom-level { font-size: 12px; color: var(--vscode-descriptionForeground); min-width: 36px; text-align: center; }
+    .image-modal-image-wrapper { overflow: hidden; max-width: 96vw; max-height: 88vh; position: relative; cursor: grab; }
+    .image-modal-image-wrapper.dragging { cursor: grabbing; }
+    .image-modal img { transform-origin: 0 0; transition: none; object-fit: contain; background: var(--vscode-editor-background); display: block; }
   </style>
 </head>
 <body>
@@ -147,10 +151,17 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
   <div class="image-modal" data-image-modal hidden>
     <div class="image-modal-content">
       <div class="image-modal-actions">
+        <button type="button" data-zoom-out title="缩小">−</button>
+        <span class="zoom-level" data-zoom-level>100%</span>
+        <button type="button" data-zoom-in title="放大">＋</button>
+        <button type="button" data-zoom-fit title="适合窗口">⊡</button>
+        <button type="button" data-zoom-original title="原始大小">1:1</button>
         <button type="button" data-download-image>下载图片</button>
         <button type="button" data-close-image-modal>关闭</button>
       </div>
-      <img data-modal-image alt="">
+      <div class="image-modal-image-wrapper" data-image-wrapper>
+        <img data-modal-image alt="">
+      </div>
     </div>
   </div>
   <script nonce="${nonce}">
@@ -158,8 +169,22 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
     const exportMarkdownButton = document.querySelector('[data-export-markdown]');
     const imageModal = document.querySelector('[data-image-modal]');
     const modalImage = document.querySelector('[data-modal-image]');
+    const imageWrapper = document.querySelector('[data-image-wrapper]');
+    const zoomLevelEl = document.querySelector('[data-zoom-level]');
     const downloadImageButton = document.querySelector('[data-download-image]');
+    const zoomInButton = document.querySelector('[data-zoom-in]');
+    const zoomOutButton = document.querySelector('[data-zoom-out]');
+    const zoomFitButton = document.querySelector('[data-zoom-fit]');
+    const zoomOriginalButton = document.querySelector('[data-zoom-original]');
     let activeImageSrc = '';
+    let imageScale = 1;
+    let imageNaturalWidth = 0;
+    let imageNaturalHeight = 0;
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let scrollStartX = 0;
+    let scrollStartY = 0;
 
     exportMarkdownButton?.addEventListener('click', () => {
       vscode.postMessage({ type: 'exportMarkdown' });
@@ -186,6 +211,57 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
       });
     });
 
+    function updateZoomDisplay() {
+      if (zoomLevelEl) {
+        zoomLevelEl.textContent = Math.round(imageScale * 100) + '%';
+      }
+    }
+
+    function applyImageTransform() {
+      if (modalImage instanceof HTMLImageElement) {
+        modalImage.style.transform = 'scale(' + imageScale + ')';
+        modalImage.style.width = imageNaturalWidth + 'px';
+        modalImage.style.height = imageNaturalHeight + 'px';
+      }
+      updateZoomDisplay();
+    }
+
+    function zoomTo(scale) {
+      imageScale = scale;
+      applyImageTransform();
+    }
+
+    function fitImage() {
+      const maxW = window.innerWidth * 0.96;
+      const maxH = window.innerHeight * 0.88;
+      if (imageNaturalWidth <= 0 || imageNaturalHeight <= 0) { return; }
+      const fitScale = Math.min(maxW / imageNaturalWidth, maxH / imageNaturalHeight, 1);
+      zoomTo(fitScale);
+    }
+
+    function originalSize() {
+      zoomTo(1);
+    }
+
+    function zoomIn() {
+      zoomTo(Math.min(imageScale * 1.25, 10));
+    }
+
+    function zoomOut() {
+      zoomTo(Math.max(imageScale / 1.25, 0.1));
+    }
+
+    downloadImageButton?.addEventListener('click', () => {
+      if (activeImageSrc) {
+        vscode.postMessage({ type: 'downloadImage', src: activeImageSrc });
+      }
+    });
+
+    zoomInButton?.addEventListener('click', zoomIn);
+    zoomOutButton?.addEventListener('click', zoomOut);
+    zoomFitButton?.addEventListener('click', fitImage);
+    zoomOriginalButton?.addEventListener('click', originalSize);
+
     document.querySelectorAll('.rich-content img').forEach((image) => {
       image.addEventListener('click', () => {
         const src = image.getAttribute('src');
@@ -195,15 +271,65 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
         activeImageSrc = src;
         modalImage.setAttribute('src', src);
         modalImage.setAttribute('alt', image.getAttribute('alt') || '');
+        modalImage.style.transform = '';
+        modalImage.style.width = '';
+        modalImage.style.height = '';
+        imageScale = 1;
+        imageNaturalWidth = 0;
+        imageNaturalHeight = 0;
+        if (imageWrapper) {
+          imageWrapper.scrollLeft = 0;
+          imageWrapper.scrollTop = 0;
+        }
         imageModal.removeAttribute('hidden');
+        if (modalImage instanceof HTMLImageElement && modalImage.complete && modalImage.naturalWidth) {
+          imageNaturalWidth = modalImage.naturalWidth;
+          imageNaturalHeight = modalImage.naturalHeight;
+          fitImage();
+        } else if (modalImage instanceof HTMLImageElement) {
+          modalImage.addEventListener('load', function onLoad() {
+            imageNaturalWidth = modalImage.naturalWidth;
+            imageNaturalHeight = modalImage.naturalHeight;
+            fitImage();
+            modalImage.removeEventListener('load', onLoad);
+          });
+        }
       });
     });
 
-    downloadImageButton?.addEventListener('click', () => {
-      if (activeImageSrc) {
-        vscode.postMessage({ type: 'downloadImage', src: activeImageSrc });
-      }
-    });
+    if (imageWrapper) {
+      imageWrapper.addEventListener('wheel', (event) => {
+        if (!imageModal || imageModal.hasAttribute('hidden')) { return; }
+        event.preventDefault();
+        if (event.deltaY < 0) { zoomIn(); } else { zoomOut(); }
+      }, { passive: false });
+
+      imageWrapper.addEventListener('mousedown', (event) => {
+        if (event.button !== 0) { return; }
+        isDragging = true;
+        dragStartX = event.clientX;
+        dragStartY = event.clientY;
+        scrollStartX = imageWrapper.scrollLeft;
+        scrollStartY = imageWrapper.scrollTop;
+        imageWrapper.classList.add('dragging');
+        event.preventDefault();
+      });
+
+      document.addEventListener('mousemove', (event) => {
+        if (!isDragging) { return; }
+        const dx = event.clientX - dragStartX;
+        const dy = event.clientY - dragStartY;
+        imageWrapper.scrollLeft = scrollStartX - dx;
+        imageWrapper.scrollTop = scrollStartY - dy;
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (isDragging) {
+          isDragging = false;
+          imageWrapper?.classList.remove('dragging');
+        }
+      });
+    }
 
     function closeImageModal() {
       if (!imageModal || !modalImage) {
@@ -212,6 +338,8 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
       imageModal.setAttribute('hidden', '');
       modalImage.removeAttribute('src');
       activeImageSrc = '';
+      imageScale = 1;
+      updateZoomDisplay();
     }
 
     imageModal?.addEventListener('click', (event) => {

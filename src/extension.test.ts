@@ -2,6 +2,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 
+const zentaoClientMock = vi.hoisted(() => ({
+  getStory: undefined as undefined | ((id: number) => Promise<unknown>)
+}));
 
 vi.mock('./zentaoClient', () => {
   const instances: Array<{ options: { baseUrl: string; timeoutMs: number } }> = [];
@@ -22,6 +25,9 @@ vi.mock('./zentaoClient', () => {
       return { executions: [] };
     }
     async getStory(id: number) {
+      if (zentaoClientMock.getStory) {
+        return zentaoClientMock.getStory(id);
+      }
       return { id, title: `Story ${id}` };
     }
     async getTask(id: number) {
@@ -617,6 +623,59 @@ describe('extension scaffold', () => {
     expect(values.projectId).toBe(1);
     expect(treeStates).toHaveLength(stateCountBeforeReselect);
     expect(closedDetails).toEqual([]);
+  });
+
+  test('surfaces the API error when story detail cannot be fetched and no cache exists', async () => {
+    vi.resetModules();
+    zentaoClientMock.getStory = async () => { throw new Error('ZenTao request failed with status 403'); };
+    const values = { baseUrl: 'https://zentao.example.com/', projectId: 628, requestTimeout: 5000 };
+    const commands = new Map<string, (...args: unknown[]) => unknown>();
+    const showErrorMessage = vi.fn();
+    vi.doMock('vscode', () => ({
+      window: {
+        createOutputChannel: () => ({ appendLine() {}, show() {} }),
+        createTreeView: () => ({ dispose() {} }),
+        showWarningMessage: vi.fn(),
+        showErrorMessage,
+        showInformationMessage: vi.fn(),
+        showInputBox: vi.fn(),
+        showQuickPick: vi.fn()
+      },
+      workspace: {
+        workspaceFolders: [{}],
+        getConfiguration: () => ({
+          get: <T,>(key: string): T | undefined => values[key as keyof typeof values] as T | undefined,
+          inspect: <T,>(key: string): { globalValue?: T } | undefined => key === 'baseUrl' ? { globalValue: values.baseUrl as T } : undefined,
+          update: vi.fn()
+        })
+      },
+      commands: {
+        registerCommand: (name: string, callback: (...args: unknown[]) => unknown) => {
+          commands.set(name, callback);
+          return { dispose() {} };
+        }
+      },
+      EventEmitter: class {
+        event = vi.fn();
+        fire = vi.fn();
+        dispose = vi.fn();
+      },
+      TreeItem: class {
+        constructor(public readonly label: string, public readonly collapsibleState?: unknown) {}
+      },
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      env: { clipboard: { writeText: vi.fn() } },
+      ConfigurationTarget: { Global: true, Workspace: false }
+    }));
+    const extension = await import('./extension');
+
+    extension.activate({ secrets: { get: async (key: string) => key.startsWith('zentao.token') ? 'token-1' : undefined, store: async () => undefined, delete: async () => undefined }, subscriptions: [], extensionUri: {} } as any);
+    await commands.get('zentao.openDetail')?.('story', 628);
+
+    const message = showErrorMessage.mock.calls[0]?.[0];
+    expect(message).toContain('需求 #628');
+    expect(message).toContain('ZenTao request failed with status 403');
+    zentaoClientMock.getStory = undefined;
   });
 
   test('runs first-time wizard when refresh has no base URL configured', async () => {

@@ -166,8 +166,14 @@ export async function loadProjectData(client: ZenTaoClient, projectId: number): 
     ...executions.map((execution) => asRecord(execution.raw)),
     ...taskRawRecords
   ]);
-  const storyResults = await Promise.allSettled(productIds.map(async (productId) => client.getProductStories(productId)));
-  const storyRawItems = storyResults.flatMap((result) => result.status === 'fulfilled' ? asArray(result.value, 'stories') : []);
+  const [projectStoriesResult, ...productStoryResults] = await Promise.allSettled([
+    client.getProjectStories(projectId),
+    ...productIds.map((productId) => client.getProductStories(productId))
+  ]);
+  const storyRawItems = [
+    ...(projectStoriesResult.status === 'fulfilled' ? asArray(projectStoriesResult.value, 'stories') : []),
+    ...productStoryResults.flatMap((result) => result.status === 'fulfilled' ? asArray(result.value, 'stories') : [])
+  ];
   const stories = mapStories(storyRawItems);
 
   return { project, stories, tasks, partialTaskFailure };

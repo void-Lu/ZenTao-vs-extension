@@ -29,6 +29,10 @@ function classicPageBaseUrl(baseUrl: string): string {
   return url.toString();
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('ZenTao Requests');
   const logger = new RequestLogger(output);
@@ -220,7 +224,16 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     currentDetailTarget = target;
-    const raw = target.type === 'story' ? await getClient().getStory(target.id) : await getClient().getTask(target.id);
+    let raw: unknown;
+    try {
+      raw = target.type === 'story' ? await getClient().getStory(target.id) : await getClient().getTask(target.id);
+    } catch (error) {
+      raw = target.type === 'story' ? treeProvider.findStoryRaw(target.id) : treeProvider.findTaskRaw(target.id);
+      if (!raw) {
+        vscode.window.showErrorMessage(`无法获取${target.type === 'story' ? '需求' : '任务'} #${target.id} 的详情：${errorMessage(error)}`);
+        return;
+      }
+    }
     const detail = toDetailViewModel(target.type, raw);
     if (!detailPanel) {
       const attachmentService = new AttachmentService(getClient);

@@ -23,6 +23,14 @@ export class ZenTaoTreeProvider implements vscode.TreeDataProvider<ZenTaoTreeNod
     this.changed.fire(undefined);
   }
 
+  findStoryRaw(id: number): unknown | undefined {
+    return this.state.stories.find((s) => s.id === id)?.raw;
+  }
+
+  findTaskRaw(id: number): unknown | undefined {
+    return this.state.tasks.find((t) => t.id === id)?.raw;
+  }
+
   setTreeSortMode(sortMode: TreeSortMode): void {
     this.sortMode = sortMode;
     this.changed.fire(undefined);
