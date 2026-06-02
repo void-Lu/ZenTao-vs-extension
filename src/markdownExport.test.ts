@@ -27,7 +27,8 @@ describe('markdownExport', () => {
     expect(markdown).toContain('## 需求描述');
     expect(markdown).toContain('[链接](https://zentao.example.com/story/101)');
     expect(markdown).toContain('![截图](https://zentao.example.com/file.png)');
-    expect(markdown).toContain('| [spec.docx](https://zentao.example.com/file/1) | 15K |');
+    expect(markdown).toContain('| 文件名 | 大小 | 添加时间 |');
+    expect(markdown).toContain('| [spec.docx](https://zentao.example.com/file/1) | 15K | 2026-05-25 |');
     expect(markdown).toContain('- 张三备注');
     expect(markdown).not.toContain('secret-token');
     expect(markdown).not.toContain('完整原始响应');

@@ -122,9 +122,9 @@ export function detailToMarkdown(detail: DetailViewModel): string {
 
   lines.push('## 附件');
   if (detail.attachments.length) {
-    lines.push('| 文件名 | 大小 |', '| --- | --- |');
+    lines.push('| 文件名 | 大小 | 添加时间 |', '| --- | --- | --- |');
     for (const attachment of detail.attachments) {
-      lines.push(`| ${attachmentName(attachment)} | ${escapeTableCell(attachment.size || '暂无')} |`);
+      lines.push(`| ${attachmentName(attachment)} | ${escapeTableCell(attachment.size || '暂无')} | ${escapeTableCell(attachment.addedDate || '未知')} |`);
     }
   } else {
     lines.push('暂无附件');
