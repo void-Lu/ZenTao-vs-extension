@@ -1,5 +1,10 @@
 # ZenTao VS Extension
 
+## v0.8.0 更新
+
+- API 请求返回 401 时，插件会使用 VS Code Secret Storage 中已保存的账号和密码自动重新获取 token，并用新 token 重试当前请求一次。
+- 如果自动重新获取 token 失败，或重试后仍返回 401，仍会显示认证错误，用户可以继续通过“重新连接”手动更新凭据。
+
 ZenTao VS Extension 是一个 VS Code 插件，用于在编辑器内浏览禅道项目、需求和任务，并快速查看详情、复制编号、打开外部链接、下载附件、预览附件内容和导出详情内容。
 
 ## 功能特性
@@ -152,4 +157,4 @@ npx @vscode/vsce package --allow-missing-repository --skip-license
 
 ## 版本
 
-当前版本：`0.7.0`
+当前版本：`0.8.0`

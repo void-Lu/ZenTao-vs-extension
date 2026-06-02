@@ -5,6 +5,7 @@ export interface ZenTaoClientOptions {
   timeoutMs: number;
   getToken(): Promise<string | undefined>;
   setToken(token: string): Promise<void>;
+  refreshToken?(): Promise<string | undefined>;
   logger: RequestLogger;
   fetch?: typeof fetch;
 }
@@ -148,7 +149,7 @@ export class ZenTaoClient {
     return resp.json() as Promise<T>;
   }
 
-  private async rawRequest(path: string, init: RequestInit & { withoutToken?: boolean }): Promise<Response> {
+  private async rawRequest(path: string, init: RequestInit & { withoutToken?: boolean }, retryUnauthorized = true, tokenOverride?: string): Promise<Response> {
     const { withoutToken, ...fetchInit } = init;
     const method = init.method ?? 'GET';
     const url = this.buildUrl(path);
@@ -165,7 +166,7 @@ export class ZenTaoClient {
 
       if (!withoutToken) {
         try {
-          const token = await this.options.getToken();
+          const token = tokenOverride ?? await this.options.getToken();
           if (token) headers.set('Token', token);
         } catch {
           // ignore getToken errors; proceed without token
@@ -181,6 +182,12 @@ export class ZenTaoClient {
       this.options.logger.log({ method, path: `/api.php/v1/${path}`, status: (response as any).status, durationMs: Date.now() - started });
 
       if (!(response as any).ok) {
+        if ((response as any).status === 401 && retryUnauthorized && !withoutToken && this.options.refreshToken) {
+          const refreshedToken = await this.options.refreshToken();
+          if (refreshedToken) {
+            return this.rawRequest(path, init, false, refreshedToken);
+          }
+        }
         throw new ZenTaoApiError(`ZenTao request failed with status ${(response as any).status}`, (response as any).status, redactSensitiveText(path));
       }
 

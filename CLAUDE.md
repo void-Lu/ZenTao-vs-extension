@@ -29,7 +29,7 @@ The main data flow is:
 1. `src/configuration.ts` reads and validates `zentao.baseUrl`, `zentao.projectId`, and `zentao.requestTimeout`; it stores account/password plus per-base-URL tokens through VS Code Secret Storage.
 2. `src/connectionWizard.ts` handles first-time setup and reconnect flows: prompt for URL/credentials, log in, choose a project, then persist the base URL and project ID.
 3. `src/projectSelection.ts` maps ZenTao project-list responses to quick-pick items and handles first-time project selection or explicit project reselection.
-4. `src/zentaoClient.ts` builds ZenTao REST API URLs, injects tokens, logs requests, handles timeouts, supports pagination via `getAll`, and downloads attachment bytes.
+4. `src/zentaoClient.ts` builds ZenTao REST API URLs, injects tokens, refreshes the stored token once on 401 when saved account/password credentials are available, logs requests, handles timeouts, supports pagination via `getAll`, and downloads attachment bytes.
 5. `src/loadProjectData.ts` loads the configured project, executions, execution tasks, and product stories inferred from project/execution/task product IDs, then maps raw ZenTao responses into tree state. Task loading tolerates partial execution failures.
 6. `src/treeProvider.ts` renders that state as one project node with story and task groups. `src/treeTransform.ts` applies the current filter text and sort mode before nodes are shown.
 7. Story/task nodes invoke `zentao.openDetail`, which fetches fresh raw data, maps it through `src/detailMapper.ts`, and shows it in `src/detailPanel.ts`. The mapper normalizes progress percentages, work-hour units, date-time formats, attachment sizes, and internal links for related stories/tasks.
@@ -52,3 +52,4 @@ Shared types are centralized in `src/types.ts`. Tests are colocated as `src/**/*
 - Attachment preview content is untrusted input; all preview HTML must be escaped or sanitized before rendering. Preview panels use the same nonce-bound CSP as detail pages.
 - Markdown exports should include only displayed detail content and must not include the complete raw response.
 - Keep credentials in VS Code Secret Storage; ordinary VS Code configuration should only hold the base URL, project ID, and timeout.
+- Token refresh on 401 relies on saved account/password credentials from Secret Storage; avoid logging refreshed tokens, passwords, or raw credential-bearing responses.

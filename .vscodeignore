@@ -5,6 +5,8 @@
 **/.omc/**
 .omx/**
 **/.omx/**
+.codegraph/**
+**/.codegraph/**
 docs/superpowers/**
 src/**/*.test.ts
 src/**

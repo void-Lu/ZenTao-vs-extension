@@ -86,6 +86,20 @@ export function activate(context: vscode.ExtensionContext): void {
       timeoutMs: requestTimeout,
       getToken: async () => (await credentials.getCredentials(baseUrl)).token,
       setToken: async (token) => credentials.storeToken(token, baseUrl),
+      refreshToken: async () => {
+        const stored = await credentials.getCredentials(baseUrl);
+        if (!stored.account || !stored.password) {
+          return undefined;
+        }
+        const loginClient = new ZenTaoClient({
+          baseUrl,
+          timeoutMs: requestTimeout,
+          getToken: async () => undefined,
+          setToken: async (token) => credentials.storeToken(token, baseUrl),
+          logger
+        });
+        return loginClient.login(stored.account, stored.password);
+      },
       logger
     });
   }
