@@ -16,6 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npx vitest run src/extension.test.ts -t "not extensible" --reporter=verbose` — run a focused test with verbose output.
 
 There is currently no lint script in `package.json`. Vitest is configured in `vitest.config.ts` to run `src/**/*.test.ts` in the `node` environment with the `forks` pool.
+`npm run verify` may print Vite's CJS Node API deprecation warning from Vitest/Vite; treat it as non-fatal unless the command exits with a failure.
 
 ## Project shape
 
