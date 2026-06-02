@@ -22,7 +22,7 @@ describe('renderDetailHtml', () => {
           { title: '需求描述', html: '<p>描述<img src="https://zentao.example.com/file.png" alt="截图"></p>' },
           { title: '验收标准', html: '暂无' }
         ],
-        attachments: [{ id: 1, name: 'spec.docx', size: '15.11K', addedDate: '2026-05-21 10:18:00', raw: {} }],
+        attachments: [{ id: 1, name: 'spec.docx', size: '15.11K', addedDate: '2026-05-21', raw: {} }],
         activities: [{ date: '2026-05-21', actor: '张三', action: 'commented', contentHtml: '评论' }],
         raw: { id: 101 }
       }
@@ -46,7 +46,7 @@ describe('renderDetailHtml', () => {
     expect(html).toContain('data-preview-attachment-index="0"');
     expect(html).toContain('spec.docx');
     expect(html).toContain('15.11K');
-    expect(html).toContain('2026-05-21 10:18:00');
+    expect(html).toContain('2026-05-21');
     expect(html).toContain('data-export-markdown');
     expect(html).toContain('导出 MD');
     expect(html).toContain('class="image-modal"');

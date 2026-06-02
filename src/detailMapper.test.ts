@@ -186,7 +186,7 @@ describe('toDetailViewModel', () => {
       { type: 'task', id: 2069, text: '接口联调' }
     ]);
     expect(model.attachments.map((attachment) => attachment.size)).toEqual(['2K', '1.5M']);
-    expect(model.attachments.map((attachment) => attachment.addedDate)).toEqual(['2026-05-21 10:18:00', '2026-05-22']);
+    expect(model.attachments.map((attachment) => attachment.addedDate)).toEqual(['2026-05-21', '2026-05-22']);
   });
 });
 

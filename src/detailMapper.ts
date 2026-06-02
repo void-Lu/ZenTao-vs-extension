@@ -286,7 +286,7 @@ function extractAttachments(raw: AnyRecord): AttachmentViewModel[] {
       id: Number.isFinite(idValue) ? idValue : undefined,
       name: stringValue(file.title ?? file.name ?? file.filename ?? file.pathname, '未命名附件'),
       size: displayAttachmentSize(file.size),
-      addedDate: dateTimeValue(file.addedDate ?? file.addedTime ?? file.date ?? file.openedDate) || '未知',
+      addedDate: dateTimeValue(file.addedDate ?? file.addedTime ?? file.date ?? file.openedDate).slice(0, 10) || '未知',
       url: stringValue(file.url ?? file.webUrl ?? file.downloadUrl, ''),
       extension: stringValue(file.extension ?? file.ext, ''),
       mimeType: stringValue(file.type ?? file.mimeType ?? file.contentType, ''),
