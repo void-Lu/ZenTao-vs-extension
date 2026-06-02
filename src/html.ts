@@ -76,8 +76,8 @@ export function renderDetailHtml(options: RenderDetailHtmlOptions): string {
     <section class="focus-block"><h2>${escapeHtml(section.title)}</h2><div class="rich-content">${section.html}</div></section>`).join('');
 
   const attachments = detail.attachments.length
-    ? `<table class="attachment-table"><thead><tr><th>文件名</th><th>大小</th><th>预览</th></tr></thead><tbody>${detail.attachments.map((attachment, index) => `
-      <tr><td><a data-attachment-index="${index}">${escapeHtml(attachment.name)}</a></td><td>${escapeHtml(attachment.size || '暂无')}</td><td><a data-preview-attachment-index="${index}">预览</a></td></tr>`).join('')}</tbody></table>`
+    ? `<table class="attachment-table"><thead><tr><th>文件名</th><th>大小</th><th>添加时间</th><th>预览</th></tr></thead><tbody>${detail.attachments.map((attachment, index) => `
+      <tr><td><a data-attachment-index="${index}">${escapeHtml(attachment.name)}</a></td><td>${escapeHtml(attachment.size || '暂无')}</td><td>${escapeHtml(attachment.addedDate || '未知')}</td><td><a data-preview-attachment-index="${index}">预览</a></td></tr>`).join('')}</tbody></table>`
     : '<p>暂无附件</p>';
 
   const activities = detail.activities.length
