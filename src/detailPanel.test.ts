@@ -193,9 +193,9 @@ describe('DetailPanel', () => {
     await messageHandlers[0]?.({ type: 'exportMarkdown' });
 
     expect(attachmentService.downloadImage).toHaveBeenCalledWith('https://zentao.example.com/file.png');
-    expect(createDirectory).toHaveBeenCalledWith({ fsPath: 'C:/workspace/requirements' });
+    expect(createDirectory).toHaveBeenCalledWith({ fsPath: 'C:/workspace/docs/requirements' });
     expect(writeFile).toHaveBeenCalledWith(
-      { fsPath: 'C:/workspace/requirements/story-1-Item 1.md' },
+      { fsPath: 'C:/workspace/docs/requirements/story-1-Item 1.md' },
       Buffer.from('# exported\n', 'utf8')
     );
   });

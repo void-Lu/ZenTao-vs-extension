@@ -225,7 +225,7 @@ export class DetailPanel {
     }
 
     try {
-      const directory = vscode.Uri.joinPath(workspaceFolder.uri, 'requirements');
+      const directory = vscode.Uri.joinPath(workspaceFolder.uri, 'docs', 'requirements');
       await vscode.workspace.fs.createDirectory(directory);
       const target = await this.nextAvailableMarkdownUri(directory, markdownFileName(detail));
       await vscode.workspace.fs.writeFile(target, Buffer.from(detailToMarkdown(detail), 'utf8'));
@@ -426,7 +426,7 @@ export class DetailPanel {
     }
 
     try {
-      const directory = vscode.Uri.joinPath(workspaceFolder.uri, 'requirements');
+      const directory = vscode.Uri.joinPath(workspaceFolder.uri, 'docs', 'requirements');
       await vscode.workspace.fs.createDirectory(directory);
       const baseName = attachment.name.replace(/\.[^.]+$/, '');
       const fileName = `${baseName}.md`;
