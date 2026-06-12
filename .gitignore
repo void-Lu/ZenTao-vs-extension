@@ -16,3 +16,4 @@ resources/test-account-info.txt
 .vscode
 resources/*
 !.resources/zentao.svg
+docs/

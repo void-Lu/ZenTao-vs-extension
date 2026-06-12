@@ -20,7 +20,7 @@ ZenTao VS Extension 是一个 VS Code 插件，用于在编辑器内浏览禅道
 - 详情页支持 `Ctrl+F` / `Cmd+F` 页内文本搜索与高亮。
 - 支持详情页图片点击放大预览，预览支持滚轮缩放、按钮缩放（放大 / 缩小 / 适合窗口 / 原始大小）、百分比显示，以及鼠标拖拽平移，并可保存图片到本地。
 - 支持附件保存到本地。
-- 支持附件内容预览（Excel、Word、PDF、TXT、Markdown），在 VS Code 内直接查看附件正文。
+- 支持附件内容预览（Excel、Word、PDF、CSV、TXT、Markdown、图片），在 VS Code 内直接查看附件正文。
 - 支持将详情页展示内容一键导出为 Markdown 文件。
 - 支持复制需求/任务编号、在浏览器打开禅道页面。
 - 支持请求日志输出，便于排查连接和 API 问题。
@@ -93,13 +93,15 @@ npx @vscode/vsce package --allow-missing-repository --skip-license
 
 | 格式 | 说明 |
 | --- | --- |
-| Excel（.xlsx / .xls） | 按工作表展示为 HTML 表格。 |
-| Word（.docx） | 提取文档正文并渲染为清洗后的 HTML。 |
+| Excel（.xlsx / .xls） | 按工作表展示为 HTML 表格，支持合并单元格展开。 |
+| Word（.docx / .doc） | 提取文档正文并渲染为清洗后的 HTML。`.doc` 需要 `word-extractor` 依赖。 |
 | PDF | 按页提取文本并分区展示。 |
+| CSV | 解析为 HTML 表格展示。 |
 | TXT | 按 UTF-8 文本展示，保留换行。 |
 | Markdown（.md） | 解析为 HTML 后清洗展示。 |
+| 图片（.jpg / .png / .gif / .bmp / .svg / .webp 等） | 以内嵌 Base64 方式直接预览图片。 |
 
-旧版 `.doc` 格式暂不支持预览。附件超过 10 MB 时也不会预览，但仍可正常下载。
+附件超过 10 MB 时不会预览，但仍可正常下载。
 
 ## 详情页图片与 Markdown 导出
 
@@ -113,7 +115,9 @@ npx @vscode/vsce package --allow-missing-repository --skip-license
 
 打开预览时大图自动缩小适应窗口，小图保持原尺寸。
 
-详情页顶部的“导出 MD”按钮会把当前页面展示的标题、基础字段、正文、附件和历史记录导出为 Markdown 文件。导出文件保存到当前工作区根目录的 `requirements/` 文件夹内，不包含“完整原始响应”。
+详情页顶部的”导出 MD”按钮会把当前页面展示的标题、基础字段、正文、附件和历史记录导出为 Markdown 文件。导出文件保存到当前工作区根目录的 `requirements/` 文件夹内，不包含”完整原始响应”。
+
+附件预览面板顶部同样提供导出按钮：对于 Excel、Word、PDF、CSV、TXT、Markdown 等文本类附件，点击后将预览内容导出为 Markdown 文件；对于图片类附件，按钮显示为”保存文件”，点击后直接将原图保存到 `requirements/` 文件夹。
 
 ## 请求日志与排错
 

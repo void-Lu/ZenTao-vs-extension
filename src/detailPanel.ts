@@ -260,6 +260,8 @@ export class DetailPanel {
       const message = asMessageRecord(rawMessage);
       if (message.type === 'exportMarkdown') {
         await this.exportPreviewMarkdown(attachment, preview);
+      } else if (message.type === 'exportFile') {
+        await this.exportRawFile(attachment, bytes);
       }
     });
     panel.webview.html = this.renderAttachmentPreviewHtml(attachment, preview, nonce);
@@ -274,7 +276,7 @@ export class DetailPanel {
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(attachment.name)}</title>
   <style>
@@ -305,7 +307,7 @@ export class DetailPanel {
     <button type="button" data-search-next title="下一个 (Enter)">&#x25BC;</button>
     <button type="button" data-close-search>关闭</button>
   </div>
-  <div class="detail-actions"><button type="button" data-export-markdown>导出 MD</button></div>
+  <div class="detail-actions"><button type="button" data-export-markdown>${preview.kind === 'image' ? '保存文件' : '导出 MD'}</button></div>
   <h1>${escapeHtml(preview.title || attachment.name)}</h1>
   <section><h2>附件信息</h2>${preview.metadataHtml}</section>
   <section><h2>预览内容</h2>${preview.html}</section>
@@ -313,7 +315,7 @@ export class DetailPanel {
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     document.querySelector('[data-export-markdown]')?.addEventListener('click', () => {
-      vscode.postMessage({ type: 'exportMarkdown' });
+      vscode.postMessage({ type: '${preview.kind === 'image' ? 'exportFile' : 'exportMarkdown'}' });
     });
 
     const searchPanel = document.querySelector('[data-search-panel]');
@@ -447,6 +449,24 @@ export class DetailPanel {
     }
   }
 
+  private async exportRawFile(attachment: DetailViewModel['attachments'][number], bytes: Uint8Array): Promise<void> {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      vscode.window.showWarningMessage('请先打开一个工作区，再保存文件。');
+      return;
+    }
+
+    try {
+      const directory = vscode.Uri.joinPath(workspaceFolder.uri, 'docs', 'requirements');
+      await vscode.workspace.fs.createDirectory(directory);
+      const target = await this.nextAvailableFileUri(directory, attachment.name);
+      await vscode.workspace.fs.writeFile(target, Buffer.from(bytes));
+      vscode.window.showInformationMessage(`文件已保存：${vscode.workspace.asRelativePath(target)}`);
+    } catch (error) {
+      vscode.window.showErrorMessage(`保存文件失败：${errorMessage(error)}`);
+    }
+  }
+
   private async nextAvailableMarkdownUri(directory: vscode.Uri, fileName: string): Promise<vscode.Uri> {
     const base = fileName.endsWith('.md') ? fileName.slice(0, -3) : fileName;
     for (let index = 0; index < 100; index++) {
@@ -459,5 +479,21 @@ export class DetailPanel {
       }
     }
     return vscode.Uri.joinPath(directory, `${base}-${Date.now()}.md`);
+  }
+
+  private async nextAvailableFileUri(directory: vscode.Uri, fileName: string): Promise<vscode.Uri> {
+    const lastDot = fileName.lastIndexOf('.');
+    const base = lastDot > 0 ? fileName.slice(0, lastDot) : fileName;
+    const ext = lastDot > 0 ? fileName.slice(lastDot) : '';
+    for (let index = 0; index < 100; index++) {
+      const candidateName = index === 0 ? fileName : `${base}-${index}${ext}`;
+      const candidate = vscode.Uri.joinPath(directory, candidateName);
+      try {
+        await vscode.workspace.fs.stat(candidate);
+      } catch {
+        return candidate;
+      }
+    }
+    return vscode.Uri.joinPath(directory, `${base}-${Date.now()}${ext}`);
   }
 }

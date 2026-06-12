@@ -38,7 +38,7 @@ The main data flow is:
 10. `src/markdownExport.ts` converts the displayed detail view model content to Markdown without including the complete raw response.
 11. `src/attachmentService.ts` resolves attachment download paths, downloads supported rich-content images, saves files through the VS Code save dialog, and provides `readBytes()` for programmatic attachment byte access without a save dialog.
 12. `src/requestLogger.ts` writes redacted request diagnostics to the `ZenTao Requests` output channel.
-13. `src/attachmentPreview.ts` parses attachment bytes for Excel (.xlsx/.xls), Word (.docx), PDF, TXT, and Markdown files, producing sanitized preview HTML. Heavy dependencies (`mammoth`, `pdf-parse`, `read-excel-file`, `markdown-it`) are lazy-loaded to avoid blocking extension activation.
+13. `src/attachmentPreview.ts` parses attachment bytes for Excel (.xlsx/.xls), Word (.docx/.doc), PDF, CSV, TXT, Markdown, and image files, producing sanitized preview HTML. Heavy dependencies (`mammoth`, `pdf-parse`, `xlsx`, `word-extractor`, `markdown-it`) are lazy-loaded to avoid blocking extension activation. Image attachments produce base64 inline previews; their export button saves the original file directly to `docs/requirements/` instead of generating Markdown.
 
 Shared types are centralized in `src/types.ts`. Tests are colocated as `src/**/*.test.ts`; many files define small interfaces so tests can use VS Code-like fakes without running inside an extension host.
 
