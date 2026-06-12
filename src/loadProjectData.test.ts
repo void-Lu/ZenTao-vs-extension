@@ -89,6 +89,20 @@ describe('loadProjectData', () => {
     expect(state.stories.map((story) => story.id)).toEqual([101]);
   });
 
+  it('fills empty project story fields from duplicate product stories', async () => {
+    const client = {
+      getProject: async () => ({ id: 123, name: '企业管理系统', products: [169] }),
+      getProjectStories: async () => ({ stories: [{ id: 101, title: '', pri: '', status: '', assignedTo: '' }] }),
+      getProductStories: async () => ({ stories: [{ id: 101, title: '登录优化', pri: 1, status: 'active', assignedToRealName: 'Amy Sun' }] }),
+      getProjectExecutions: async () => ({ executions: [] }),
+      getExecutionTasks: async () => ({ tasks: [] })
+    } as unknown as ZenTaoClient;
+
+    const state = await loadProjectData(client, 123);
+
+    expect(state.stories).toMatchObject([{ id: 101, title: '登录优化', priority: 'P1', status: 'active', assignedTo: 'Amy Sun' }]);
+  });
+
   it('keeps successful tasks when one execution task request fails', async () => {
     const client = {
       getProject: async () => ({ id: 123, name: '企业管理系统' }),

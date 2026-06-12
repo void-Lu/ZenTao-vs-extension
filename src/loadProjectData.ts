@@ -83,6 +83,32 @@ function addProductId(value: unknown, ids: Set<number>): void {
   }
 }
 
+function hasValue(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  if (typeof value === 'string') {
+    return value.trim() !== '';
+  }
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+  if (typeof value === 'object') {
+    return Object.keys(value as AnyRecord).length > 0;
+  }
+  return true;
+}
+
+function mergeStoryRecord(existing: AnyRecord, incoming: AnyRecord): AnyRecord {
+  const merged = { ...existing };
+  for (const [key, value] of Object.entries(incoming)) {
+    if (!hasValue(merged[key]) && hasValue(value)) {
+      merged[key] = value;
+    }
+  }
+  return merged;
+}
+
 function collectProductIds(records: AnyRecord[]): number[] {
   const ids = new Set<number>();
   for (const record of records) {
@@ -95,23 +121,25 @@ function collectProductIds(records: AnyRecord[]): number[] {
 }
 
 function mapStories(storiesRaw: unknown[]): StoryListItem[] {
-  const storiesById = new Map<number, StoryListItem>();
+  const storiesById = new Map<number, AnyRecord>();
   for (const item of storiesRaw) {
     const story = asRecord(item);
     const id = Number(story.id);
-    if (!Number.isFinite(id) || storiesById.has(id)) {
+    if (!Number.isFinite(id)) {
       continue;
     }
-    storiesById.set(id, {
-      id,
-      title: stringValue(story.title, `需求 #${story.id}`),
-      priority: priority(story.pri),
-      status: stringValue(story.status, '-'),
-      assignedTo: assignedTo(story),
-      raw: story
-    });
+    const existing = storiesById.get(id);
+    storiesById.set(id, existing ? mergeStoryRecord(existing, story) : story);
   }
-  return [...storiesById.values()];
+
+  return [...storiesById.values()].map((story) => ({
+    id: Number(story.id),
+    title: stringValue(story.title, `需求 #${story.id}`),
+    priority: priority(story.pri),
+    status: stringValue(story.status, '-'),
+    assignedTo: assignedTo(story),
+    raw: story
+  }));
 }
 
 export async function loadProjectData(client: ZenTaoClient, projectId: number): Promise<TreeDataState> {
