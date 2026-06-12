@@ -52,6 +52,7 @@ export interface TreeDataState {
   project?: ProjectInfo;
   stories: StoryListItem[];
   tasks: TaskListItem[];
+  partialStoryFailure?: boolean;
   partialTaskFailure: boolean;
   message?: string;
 }

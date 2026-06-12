@@ -5,7 +5,7 @@ import { ProjectInfo, StoryListItem, TaskListItem, TreeDataState } from './types
 export type ZenTaoTreeNode =
   | { kind: 'message'; label: string }
   | { kind: 'project'; project: ProjectInfo }
-  | { kind: 'storyGroup'; stories: StoryListItem[] }
+  | { kind: 'storyGroup'; stories: StoryListItem[]; partialFailure: boolean }
   | { kind: 'taskGroup'; tasks: TaskListItem[]; partialFailure: boolean }
   | { kind: 'story'; story: StoryListItem }
   | { kind: 'task'; task: TaskListItem };
@@ -57,7 +57,7 @@ export class ZenTaoTreeProvider implements vscode.TreeDataProvider<ZenTaoTreeNod
       }
       case 'storyGroup': {
         const item = new vscode.TreeItem('需求', vscode.TreeItemCollapsibleState.Expanded);
-        item.description = `共 ${element.stories.length} 条`;
+        item.description = element.partialFailure ? `共 ${element.stories.length} 条，部分失败` : `共 ${element.stories.length} 条`;
         item.contextValue = 'storyGroup';
         return item;
       }
@@ -96,7 +96,7 @@ export class ZenTaoTreeProvider implements vscode.TreeDataProvider<ZenTaoTreeNod
 
     if (element.kind === 'project') {
       return [
-        { kind: 'storyGroup', stories: visibleState.stories },
+        { kind: 'storyGroup', stories: visibleState.stories, partialFailure: visibleState.partialStoryFailure ?? false },
         { kind: 'taskGroup', tasks: visibleState.tasks, partialFailure: visibleState.partialTaskFailure }
       ];
     }

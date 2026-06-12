@@ -59,7 +59,11 @@ export class ZenTaoClient {
   }
 
   async getProductStories(productId: number): Promise<unknown> {
-    return this.getAll(`stories?product=${productId}`);
+    try {
+      return await this.getAll(`products/${productId}/stories`);
+    } catch {
+      return this.getAll(`stories?product=${productId}`);
+    }
   }
 
   async getProjectExecutions(projectId: number): Promise<unknown> {

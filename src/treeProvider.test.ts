@@ -63,4 +63,15 @@ describe('ZenTaoTreeProvider tree transforms', () => {
     expect((provider.getChildren(storyGroup) as any[]).map((node) => node.story.id)).toEqual([1, 2]);
     expect((provider.getChildren(taskGroup) as any[]).map((node) => node.task.id)).toEqual([10, 20]);
   });
+
+  it('shows partial failure in story group description', () => {
+    const provider = new ZenTaoTreeProvider();
+    provider.setState({ ...state(), partialStoryFailure: true });
+
+    const [project] = provider.getChildren() as any[];
+    const [storyGroup] = provider.getChildren(project) as any[];
+    const item = provider.getTreeItem(storyGroup) as any;
+
+    expect(item.description).toBe('共 2 条，部分失败');
+  });
 });

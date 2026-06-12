@@ -142,18 +142,22 @@ npm install
 npm run compile
 npm test
 npm run verify
-npx @vscode/vsce package --allow-missing-repository --skip-license
+npm run package:vsix
+npm run release:check
 ```
 
 常用脚本：
 
 | 命令 | 说明 |
 | --- | --- |
-| `npm run compile` | 运行 TypeScript 编译。 |
+| `npm run check` | 运行 TypeScript 类型检查，不输出构建文件。 |
+| `npm run bundle` | 使用 esbuild 生成 VS Code 扩展运行入口 `out/extension.js`。 |
+| `npm run compile` | 运行类型检查并生成 bundle。 |
 | `npm run watch` | 以 watch 模式运行 TypeScript。 |
 | `npm test` | 运行全部 Vitest 测试。 |
 | `npm run verify` | 编译并运行完整测试套件。 |
-| `npx @vscode/vsce package --allow-missing-repository --skip-license` | 编译并生成 VSIX 安装包。 |
+| `npm run package:vsix` | 编译并生成 VSIX 安装包。 |
+| `npm run release:check` | 编译、测试并生成 VSIX 安装包。 |
 
 ## 版本
 

@@ -198,11 +198,14 @@ export async function loadProjectData(client: ZenTaoClient, projectId: number): 
     client.getProjectStories(projectId),
     ...productIds.map((productId) => client.getProductStories(productId))
   ]);
+  const partialStoryFailure = projectStoriesResult.status === 'rejected'
+    || productStoryResults.some((result) => result.status === 'rejected');
   const storyRawItems = [
     ...(projectStoriesResult.status === 'fulfilled' ? asArray(projectStoriesResult.value, 'stories') : []),
     ...productStoryResults.flatMap((result) => result.status === 'fulfilled' ? asArray(result.value, 'stories') : [])
   ];
   const stories = mapStories(storyRawItems);
+  const message = partialStoryFailure ? '需求列表部分加载失败，可打开请求日志查看被拒绝或失败的接口。' : undefined;
 
-  return { project, stories, tasks, partialTaskFailure };
+  return { project, stories, tasks, partialStoryFailure, partialTaskFailure, message };
 }

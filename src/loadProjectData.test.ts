@@ -122,4 +122,20 @@ describe('loadProjectData', () => {
     expect(state.tasks.map((task) => task.id)).toEqual([301]);
     expect(state.partialTaskFailure).toBe(true);
   });
+
+  it('marks partial story failure when any story source fails', async () => {
+    const client = {
+      getProject: async () => ({ id: 123, name: '企业管理系统', products: [169] }),
+      getProjectStories: async () => { throw new Error('project stories forbidden'); },
+      getProductStories: async () => ({ stories: [{ id: 101, title: '登录优化', pri: 1, status: 'active' }] }),
+      getProjectExecutions: async () => ({ executions: [] }),
+      getExecutionTasks: async () => ({ tasks: [] })
+    } as unknown as ZenTaoClient;
+
+    const state = await loadProjectData(client, 123);
+
+    expect(state.stories.map((story) => story.id)).toEqual([101]);
+    expect(state.partialStoryFailure).toBe(true);
+    expect(state.message).toContain('需求列表部分加载失败');
+  });
 });

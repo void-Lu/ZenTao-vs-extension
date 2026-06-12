@@ -12,9 +12,11 @@ src/**/*.test.ts
 src/**
 out/**/*.test.js
 node_modules/**/.cache/**
+node_modules/**
 out/**/*.map
 resources/test-account-info.txt
 dist/**
+scripts/**
 tsconfig.json
 vitest.config.ts
 .gitignore
