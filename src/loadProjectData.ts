@@ -2,6 +2,7 @@ import { ExecutionInfo, ProjectInfo, StoryListItem, TaskListItem, TreeDataState 
 import { ZenTaoClient } from './zentaoClient';
 
 type AnyRecord = Record<string, unknown>;
+const REQUEST_CONCURRENCY = 5;
 
 function asRecord(value: unknown): AnyRecord {
   return value && typeof value === 'object' ? value as AnyRecord : {};
@@ -55,6 +56,36 @@ function priority(value: unknown): string {
   return raw.startsWith('P') ? raw : `P${raw}`;
 }
 
+async function settleWithConcurrency<T, R>(
+  items: T[],
+  mapper: (item: T) => Promise<R>
+): Promise<PromiseSettledResult<R>[]> {
+  const results = new Array<PromiseSettledResult<R>>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(REQUEST_CONCURRENCY, items.length);
+
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      try {
+        results[index] = { status: 'fulfilled', value: await mapper(items[index]) };
+      } catch (reason) {
+        results[index] = { status: 'rejected', reason };
+      }
+    }
+  }));
+
+  return results;
+}
+
+function addNumericId(value: unknown, ids: Set<number>): void {
+  const id = Number(value);
+  if (Number.isInteger(id) && id > 0) {
+    ids.add(id);
+  }
+}
+
 function addProductId(value: unknown, ids: Set<number>): void {
   if (value === null || value === undefined || value === '') {
     return;
@@ -70,17 +101,31 @@ function addProductId(value: unknown, ids: Set<number>): void {
     const directId = record.id ?? record.product ?? record.productID ?? record.productId;
     if (directId !== undefined) {
       addProductId(directId, ids);
-      return;
-    }
-    for (const item of Object.values(record)) {
-      addProductId(item, ids);
     }
     return;
   }
-  const id = Number(value);
-  if (Number.isInteger(id) && id > 0) {
-    ids.add(id);
+  addNumericId(value, ids);
+}
+
+function addStoryId(value: unknown, ids: Set<number>): void {
+  if (value === null || value === undefined || value === '') {
+    return;
   }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      addStoryId(item, ids);
+    }
+    return;
+  }
+  if (typeof value === 'object') {
+    const record = asRecord(value);
+    const directId = record.id ?? record.story ?? record.storyID ?? record.storyId;
+    if (directId !== undefined) {
+      addStoryId(directId, ids);
+    }
+    return;
+  }
+  addNumericId(value, ids);
 }
 
 function hasValue(value: unknown): boolean {
@@ -116,6 +161,16 @@ function collectProductIds(records: AnyRecord[]): number[] {
     addProductId(record.product, ids);
     addProductId(record.productID, ids);
     addProductId(record.productId, ids);
+  }
+  return [...ids];
+}
+
+function collectStoryIds(records: AnyRecord[]): number[] {
+  const ids = new Set<number>();
+  for (const record of records) {
+    addStoryId(record.story, ids);
+    addStoryId(record.storyID, ids);
+    addStoryId(record.storyId, ids);
   }
   return [...ids];
 }
@@ -161,10 +216,10 @@ export async function loadProjectData(client: ZenTaoClient, projectId: number): 
     return { id: Number(execution.id), name: stringValue(execution.name, `执行 #${execution.id}`), raw: execution };
   }).filter((execution) => Number.isFinite(execution.id));
 
-  const taskResults = await Promise.allSettled(executions.map(async (execution) => ({
+  const taskResults = await settleWithConcurrency(executions, async (execution) => ({
     execution,
     response: await client.getExecutionTasks(execution.id)
-  })));
+  }));
 
   const tasks: TaskListItem[] = [];
   const taskRawRecords: AnyRecord[] = [];
@@ -194,17 +249,39 @@ export async function loadProjectData(client: ZenTaoClient, projectId: number): 
     ...executions.map((execution) => asRecord(execution.raw)),
     ...taskRawRecords
   ]);
-  const [projectStoriesResult, ...productStoryResults] = await Promise.allSettled([
-    client.getProjectStories(projectId),
-    ...productIds.map((productId) => client.getProductStories(productId))
-  ]);
-  const partialStoryFailure = projectStoriesResult.status === 'rejected'
-    || productStoryResults.some((result) => result.status === 'rejected');
+  const storySourceResults = await settleWithConcurrency([
+    { type: 'project' as const, id: projectId },
+    ...productIds.map((id) => ({ type: 'product' as const, id })),
+    ...executions.map((execution) => ({ type: 'execution' as const, id: execution.id }))
+  ], async (source) => {
+    if (source.type === 'project') {
+      return client.getProjectStories(source.id);
+    }
+    if (source.type === 'product') {
+      return client.getProductStories(source.id);
+    }
+    return client.getExecutionStories(source.id);
+  });
+  const [projectStoriesResult, ...remainingStoryResults] = storySourceResults;
+  const productStoryResults = remainingStoryResults.slice(0, productIds.length);
+  const executionStoryResults = remainingStoryResults.slice(productIds.length);
+  const sourceStoryFailure = projectStoriesResult.status === 'rejected'
+    || productStoryResults.some((result) => result.status === 'rejected')
+    || executionStoryResults.some((result) => result.status === 'rejected');
   const storyRawItems = [
     ...(projectStoriesResult.status === 'fulfilled' ? asArray(projectStoriesResult.value, 'stories') : []),
-    ...productStoryResults.flatMap((result) => result.status === 'fulfilled' ? asArray(result.value, 'stories') : [])
+    ...productStoryResults.flatMap((result) => result.status === 'fulfilled' ? asArray(result.value, 'stories') : []),
+    ...executionStoryResults.flatMap((result) => result.status === 'fulfilled' ? asArray(result.value, 'stories') : [])
   ];
-  const stories = mapStories(storyRawItems);
+  const listedStoryIds = new Set(storyRawItems.map((item) => Number(asRecord(item).id)).filter((id) => Number.isInteger(id) && id > 0));
+  const taskStoryIds = collectStoryIds(taskRawRecords);
+  const missingTaskStoryIds = sourceStoryFailure || storyRawItems.length === 0
+    ? taskStoryIds.filter((storyId) => !listedStoryIds.has(storyId))
+    : [];
+  const taskStoryResults = await settleWithConcurrency(missingTaskStoryIds, (storyId) => client.getStory(storyId));
+  const taskStoryRawItems = taskStoryResults.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
+  const partialStoryFailure = sourceStoryFailure || taskStoryResults.some((result) => result.status === 'rejected');
+  const stories = mapStories([...storyRawItems, ...taskStoryRawItems]);
   const message = partialStoryFailure ? '需求列表部分加载失败，可打开请求日志查看被拒绝或失败的接口。' : undefined;
 
   return { project, stories, tasks, partialStoryFailure, partialTaskFailure, message };

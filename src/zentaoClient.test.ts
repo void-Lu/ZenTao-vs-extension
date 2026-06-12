@@ -78,6 +78,26 @@ describe('ZenTaoClient', () => {
     expect(urls[0]).toBe('https://zentao.example.com/api.php/v1/products/169/stories');
   });
 
+  it('fetches execution stories with the v1 execution stories endpoint', async () => {
+    const urls: string[] = [];
+    const client = new ZenTaoClient({
+      baseUrl: 'https://zentao.example.com/',
+      timeoutMs: 5000,
+      getToken: async () => 'abc',
+      setToken: async () => undefined,
+      logger: new RequestLogger({ appendLine() {}, show() {} } as any),
+      fetch: async (input: RequestInfo | URL) => {
+        urls.push(String(input));
+        return jsonResponse({ stories: [{ id: 101 }] });
+      }
+    });
+
+    const data = await client.getExecutionStories(201);
+
+    expect(data).toEqual({ stories: [{ id: 101 }] });
+    expect(urls[0]).toBe('https://zentao.example.com/api.php/v1/executions/201/stories');
+  });
+
   it('falls back to the legacy product query endpoint when product stories endpoint fails', async () => {
     const urls: string[] = [];
     const client = new ZenTaoClient({

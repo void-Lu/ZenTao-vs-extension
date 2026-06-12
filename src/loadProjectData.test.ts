@@ -3,6 +3,8 @@ import { loadProjectData } from './loadProjectData';
 import { ZenTaoClient } from './zentaoClient';
 
 describe('loadProjectData', () => {
+  const delay = () => new Promise((resolve) => setTimeout(resolve, 0));
+
   it('maps project stories and execution tasks into tree state', async () => {
     const client = {
       getProject: async () => ({ id: 123, name: '企业管理系统', products: [169] }),
@@ -137,5 +139,97 @@ describe('loadProjectData', () => {
     expect(state.stories.map((story) => story.id)).toEqual([101]);
     expect(state.partialStoryFailure).toBe(true);
     expect(state.message).toContain('需求列表部分加载失败');
+  });
+
+  it('fills missing stories from task story IDs when story list sources fail', async () => {
+    const storyRequests: number[] = [];
+    const client = {
+      getProject: async () => ({ id: 123, name: '企业管理系统' }),
+      getProjectStories: async () => { throw new Error('project stories forbidden'); },
+      getProductStories: async () => ({ stories: [] }),
+      getProjectExecutions: async () => ({ executions: [{ id: 201 }] }),
+      getExecutionTasks: async () => ({ tasks: [{ id: 301, name: '前端页面', pri: 2, status: 'doing', story: 4712 }] }),
+      getStory: async (storyId: number) => {
+        storyRequests.push(storyId);
+        return { id: storyId, title: '任务关联需求', pri: 1, status: 'active', assignedToRealName: 'Amy Sun' };
+      }
+    } as unknown as ZenTaoClient;
+
+    const state = await loadProjectData(client, 123);
+
+    expect(storyRequests).toEqual([4712]);
+    expect(state.stories).toMatchObject([{ id: 4712, title: '任务关联需求', priority: 'P1', status: 'active', assignedTo: 'Amy Sun' }]);
+    expect(state.partialStoryFailure).toBe(true);
+  });
+
+  it('loads execution stories when project and product story sources fail', async () => {
+    const executionStoryRequests: number[] = [];
+    const client = {
+      getProject: async () => ({ id: 123, name: '企业管理系统', products: [169] }),
+      getProjectStories: async () => { throw new Error('project stories forbidden'); },
+      getProductStories: async () => { throw new Error('product stories forbidden'); },
+      getProjectExecutions: async () => ({ executions: [{ id: 201, name: '一期' }] }),
+      getExecutionTasks: async () => ({ tasks: [] }),
+      getExecutionStories: async (executionId: number) => {
+        executionStoryRequests.push(executionId);
+        return { stories: [{ id: 4712, title: '执行关联需求', pri: 1, status: 'active' }] };
+      }
+    } as unknown as ZenTaoClient;
+
+    const state = await loadProjectData(client, 123);
+
+    expect(executionStoryRequests).toEqual([201]);
+    expect(state.stories).toMatchObject([{ id: 4712, title: '执行关联需求', priority: 'P1', status: 'active' }]);
+    expect(state.partialStoryFailure).toBe(true);
+  });
+
+  it('limits execution task and product story request concurrency', async () => {
+    let activeTasks = 0;
+    let maxActiveTasks = 0;
+    let activeProducts = 0;
+    let maxActiveProducts = 0;
+    const ids = Array.from({ length: 8 }, (_, index) => index + 1);
+    const client = {
+      getProject: async () => ({ id: 123, name: '企业管理系统', products: ids }),
+      getProjectStories: async () => ({ stories: [] }),
+      getProductStories: async () => {
+        activeProducts += 1;
+        maxActiveProducts = Math.max(maxActiveProducts, activeProducts);
+        await delay();
+        activeProducts -= 1;
+        return { stories: [] };
+      },
+      getProjectExecutions: async () => ({ executions: ids.map((id) => ({ id })) }),
+      getExecutionTasks: async () => {
+        activeTasks += 1;
+        maxActiveTasks = Math.max(maxActiveTasks, activeTasks);
+        await delay();
+        activeTasks -= 1;
+        return { tasks: [] };
+      }
+    } as unknown as ZenTaoClient;
+
+    await loadProjectData(client, 123);
+
+    expect(maxActiveTasks).toBeLessThanOrEqual(5);
+    expect(maxActiveProducts).toBeLessThanOrEqual(5);
+  });
+
+  it('does not collect nested unrelated numbers as product IDs', async () => {
+    const productRequests: number[] = [];
+    const client = {
+      getProject: async () => ({ id: 123, name: '企业管理系统', products: { metadata: { id: 999 } } }),
+      getProjectStories: async () => ({ stories: [] }),
+      getProductStories: async (productId: number) => {
+        productRequests.push(productId);
+        return { stories: [] };
+      },
+      getProjectExecutions: async () => ({ executions: [] }),
+      getExecutionTasks: async () => ({ tasks: [] })
+    } as unknown as ZenTaoClient;
+
+    await loadProjectData(client, 123);
+
+    expect(productRequests).toEqual([]);
   });
 });

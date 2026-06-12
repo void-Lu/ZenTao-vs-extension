@@ -37,6 +37,31 @@ export function sanitizeRichHtml(value: unknown): string {
   });
 }
 
+export function rewriteContentImageUrls(html: string, baseUrl: string, token: string | undefined): string {
+  if (!token) {
+    return html;
+  }
+  const normalizedBase = baseUrl.replace(/\/api\.php\/v1\/?$/i, '/');
+  // Rewrite <img src="..."> URLs pointing to the ZenTao server to include the session token
+  const imgSrcRegex = /\bsrc="(https?:\/\/[^"]+)"/gi;
+  let result = '';
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = imgSrcRegex.exec(html)) !== null) {
+    result += html.slice(lastIndex, match.index);
+    const url = match[1];
+    if (url.startsWith(normalizedBase) && !url.includes('zentaosid=')) {
+      const separator = url.includes('?') ? '&' : '?';
+      result += `src="${url}${separator}zentaosid=${encodeURIComponent(token)}"`;
+    } else {
+      result += match[0];
+    }
+    lastIndex = match.index + match[0].length;
+  }
+  result += html.slice(lastIndex);
+  return result;
+}
+
 function redactSensitiveRawJsonKey(key: string, value: unknown): unknown {
   return sensitiveRawJsonKeys.has(key.toLowerCase()) ? '[REDACTED]' : value;
 }

@@ -5,12 +5,13 @@ import { runConnectionWizard } from './connectionWizard';
 import { reselectProject } from './projectSelection';
 import { DetailPanel } from './detailPanel';
 import { toDetailViewModel } from './detailMapper';
+import { rewriteContentImageUrls } from './html';
 import { loadProjectData } from './loadProjectData';
 import { RequestLogger } from './requestLogger';
 import { ZenTaoClient } from './zentaoClient';
 import { ZenTaoTreeNode, ZenTaoTreeProvider } from './treeProvider';
 import { TreeSortMode } from './treeTransform';
-import { ZenTaoItemType } from './types';
+import { ZenTaoItemType, DetailViewModel } from './types';
 
 function getNodeTarget(node: unknown): { type: ZenTaoItemType; id: number } | undefined {
   const treeNode = node as ZenTaoTreeNode | undefined;
@@ -27,6 +28,18 @@ function classicPageBaseUrl(baseUrl: string): string {
   const url = new URL(baseUrl);
   url.pathname = url.pathname.replace(/\/api\.php\/v1\/?$/i, '/');
   return url.toString();
+}
+
+function rewriteDetailImageUrls(detail: DetailViewModel, baseUrl: string, token: string | undefined): void {
+  if (!token) {
+    return;
+  }
+  for (const section of detail.contentSections) {
+    section.html = rewriteContentImageUrls(section.html, baseUrl, token);
+  }
+  for (const activity of detail.activities) {
+    activity.contentHtml = rewriteContentImageUrls(activity.contentHtml, baseUrl, token);
+  }
 }
 
 function errorMessage(error: unknown): string {
@@ -170,7 +183,10 @@ export function activate(context: vscode.ExtensionContext): void {
     const raw = currentDetailTarget.type === 'story'
       ? await getClient().getStory(currentDetailTarget.id)
       : await getClient().getTask(currentDetailTarget.id);
-    detailPanel.show(toDetailViewModel(currentDetailTarget.type, raw));
+    const detail = toDetailViewModel(currentDetailTarget.type, raw);
+    const baseUrl = clientConfig?.baseUrl ?? readConnectionConfig(getWorkspaceConfig()).baseUrl;
+    rewriteDetailImageUrls(detail, baseUrl, (await credentials.getCredentials(baseUrl)).token);
+    detailPanel.show(detail);
   }
 
   async function refresh(): Promise<void> {
@@ -249,6 +265,8 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }
     const detail = toDetailViewModel(target.type, raw);
+    const baseUrl = clientConfig?.baseUrl ?? readConnectionConfig(getWorkspaceConfig()).baseUrl;
+    rewriteDetailImageUrls(detail, baseUrl, (await credentials.getCredentials(baseUrl)).token);
     if (!detailPanel) {
       const attachmentService = new AttachmentService(getClient);
       detailPanel = new DetailPanel(context.extensionUri, attachmentService, async (linkedType, linkedId) => {

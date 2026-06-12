@@ -74,6 +74,10 @@ export class ZenTaoClient {
     return this.getAll(`executions/${executionId}/tasks`);
   }
 
+  async getExecutionStories(executionId: number): Promise<unknown> {
+    return this.getAll(`executions/${executionId}/stories`);
+  }
+
   async getStory(storyId: number): Promise<unknown> {
     return this.get(`stories/${storyId}`);
   }

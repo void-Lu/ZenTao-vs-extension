@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderDetailHtml } from './html';
+import { renderDetailHtml, rewriteContentImageUrls } from './html';
 
 describe('renderDetailHtml', () => {
   it('renders attachments before history and includes CSP', () => {
@@ -61,6 +61,58 @@ describe('renderDetailHtml', () => {
     expect(html).toContain('<div class="rich-content">评论</div>');
     expect(html).not.toContain('activity-meta');
     expect(html).not.toContain('2026-05-21，由 张三 commented');
+  });
+
+  describe('rewriteContentImageUrls', () => {
+    it('appends zentaosid to URLs matching the base URL', () => {
+      const html = '<p>描述</p><img src="https://pm.netsuitecn.cn/file-read-11411.png" alt="截图">';
+      const result = rewriteContentImageUrls(html, 'https://pm.netsuitecn.cn/api.php/v1', 'sid123');
+      expect(result).toContain('zentaosid=sid123');
+      expect(result).toContain('https://pm.netsuitecn.cn/file-read-11411.png?');
+    });
+
+    it('does not duplicate zentaosid if already present', () => {
+      const html = '<img src="https://pm.netsuitecn.cn/file-read-1.png?zentaosid=old" alt="x">';
+      const result = rewriteContentImageUrls(html, 'https://pm.netsuitecn.cn/api.php/v1', 'new');
+      expect(result).not.toContain('zentaosid=new');
+      expect(result).toContain('zentaosid=old');
+    });
+
+    it('handles base URL without trailing slash', () => {
+      const html = '<img src="https://pm.netsuitecn.cn/file-read-1.png" alt="x">';
+      const result = rewriteContentImageUrls(html, 'https://pm.netsuitecn.cn/api.php/v1', 'tok');
+      expect(result).toContain('?zentaosid=tok');
+    });
+
+    it('uses ampersand when URL already has query params', () => {
+      const html = '<img src="https://pm.netsuitecn.cn/file-read-1.png?size=large" alt="x">';
+      const result = rewriteContentImageUrls(html, 'https://pm.netsuitecn.cn/api.php/v1', 'tok');
+      expect(result).toContain('&zentaosid=tok');
+    });
+
+    it('does not rewrite non-ZenTao URLs', () => {
+      const html = '<img src="https://example.com/image.png" alt="x">';
+      const result = rewriteContentImageUrls(html, 'https://pm.netsuitecn.cn/api.php/v1', 'tok');
+      expect(result).not.toContain('zentaosid');
+    });
+
+    it('returns unchanged HTML when token is undefined', () => {
+      const html = '<img src="https://pm.netsuitecn.cn/file-read-1.png" alt="x">';
+      const result = rewriteContentImageUrls(html, 'https://pm.netsuitecn.cn/api.php/v1', undefined);
+      expect(result).toBe(html);
+    });
+
+    it('returns unchanged HTML when token is empty', () => {
+      const html = '<img src="https://pm.netsuitecn.cn/file-read-1.png" alt="x">';
+      const result = rewriteContentImageUrls(html, 'https://pm.netsuitecn.cn/api.php/v1', '');
+      expect(result).toBe(html);
+    });
+
+    it('rewrites multiple image URLs', () => {
+      const html = '<img src="https://pm.netsuitecn.cn/a.png" alt=""><img src="https://pm.netsuitecn.cn/b.png" alt="">';
+      const result = rewriteContentImageUrls(html, 'https://pm.netsuitecn.cn/api.php/v1', 'tok');
+      expect(result.match(/zentaosid=tok/g)).toHaveLength(2);
+    });
   });
 
   it('renders an empty history state when actions are absent', () => {
