@@ -329,6 +329,20 @@ describe('htmlToMarkdown', () => {
     expect(result).toContain('| 1 |  |');
   });
 
+  it('ignores empty tables instead of throwing during preview markdown export', async () => {
+    const { htmlToMarkdown } = await import('./detailPanel');
+
+    expect(() => htmlToMarkdown('<section><h3>Sheet1</h3><table></table></section>')).not.toThrow();
+    expect(htmlToMarkdown('<section><h3>Sheet1</h3><table></table></section>')).toContain('### Sheet1');
+  });
+
+  it('ignores table rows without cells instead of throwing during preview markdown export', async () => {
+    const { htmlToMarkdown } = await import('./detailPanel');
+
+    expect(() => htmlToMarkdown('<table><tr></tr></table>')).not.toThrow();
+    expect(htmlToMarkdown('<table><tr></tr></table>').trim()).toBe('');
+  });
+
   it('preserves pre blocks as code fences', async () => {
     const { htmlToMarkdown } = await import('./detailPanel');
     const html = '<pre>line 1\nline 2</pre>';

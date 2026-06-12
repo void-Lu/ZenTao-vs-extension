@@ -87,6 +87,7 @@ function convertTables(html: string): string {
       }
       if (cells.length) { rows.push(cells); }
     }
+    if (!rows.length) { return ''; }
 
     // Normalize column count
     const maxCols = Math.max(...rows.map((r) => r.length));
