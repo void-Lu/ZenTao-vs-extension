@@ -21,9 +21,7 @@ export interface RunConnectionWizardOptions {
   configuration: ProjectSelectionConfiguration;
   createClient(baseUrl: string): ConnectionWizardClient;
   storeLogin(account: string, password: string, token: string, baseUrl: string): Promise<void>;
-}
-
-export interface ConnectionWizardResult {
+}export interface ConnectionWizardResult {
   baseUrl: string;
   projectId: number;
 }

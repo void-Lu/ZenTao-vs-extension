@@ -12,8 +12,8 @@ vi.mock('vscode', () => ({
   TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 }
 }));
 
-import { ZenTaoTreeProvider } from './treeProvider';
-import { TreeDataState } from './types';
+import { ZenTaoTreeProvider } from '../treeProvider';
+import { TreeDataState } from '../types';
 
 function state(): TreeDataState {
   return {

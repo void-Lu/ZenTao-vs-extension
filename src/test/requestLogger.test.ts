@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { redactSensitiveText, toLogLine, RequestLogger } from './requestLogger';
+import { redactSensitiveText, toLogLine, formatBeijingTimestamp, RequestLogger } from '../requestLogger';
 
 describe('redactSensitiveText', () => {
   it('redacts token, password, and cookie values', () => {
@@ -134,12 +134,23 @@ describe('toLogLine', () => {
     } as const;
 
     const line = toLogLine(entry as any);
-    expect(line).toMatch(/\d{4}-\d{2}-\d{2}T/); // ISO timestamp
+    expect(line).toMatch(/\d{4}-\d{2}-\d{2}T/); // ISO-like timestamp
+    expect(line).toContain('+08:00'); // 固定东八区时间
     expect(line).toContain('POST /login 500 7ms');
     expect(line).not.toContain('abc123');
     expect(line).not.toContain('secret');
     expect(line).not.toContain('zzz');
     expect(line).toContain('[REDACTED]');
+  });
+
+  it('formats the timestamp as fixed +08:00 regardless of host timezone', () => {
+    // 2026-06-22T13:35:09.000Z -> 2026-06-22T21:35:09+08:00
+    const fixed = formatBeijingTimestamp(new Date('2026-06-22T13:35:09.000Z'));
+    expect(fixed).toBe('2026-06-22T21:35:09+08:00');
+
+    // 跨日场景：2026-06-22T16:30:00Z -> 2026-06-23T00:30:00+08:00
+    const crossDay = formatBeijingTimestamp(new Date('2026-06-22T16:30:00.000Z'));
+    expect(crossDay).toBe('2026-06-23T00:30:00+08:00');
   });
 
   it('redacts secrets present in the path/query when formatting', () => {

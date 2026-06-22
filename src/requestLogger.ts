@@ -6,6 +6,21 @@ export interface RequestLogEntry {
   error?: unknown;
 }
 
+// 将时间格式化为固定东八区时间字符串，例如 2026-06-22T21:35:09+08:00。
+// 不依赖宿主机器时区，确保日志时间一致。
+export function formatBeijingTimestamp(date: Date): string {
+  const beijingOffsetMs = 8 * 60 * 60 * 1000;
+  const local = new Date(date.getTime() + beijingOffsetMs);
+  const pad = (n: number) => n < 10 ? `0${n}` : `${n}`;
+  const yyyy = local.getUTCFullYear();
+  const mm = pad(local.getUTCMonth() + 1);
+  const dd = pad(local.getUTCDate());
+  const hh = pad(local.getUTCHours());
+  const mi = pad(local.getUTCMinutes());
+  const ss = pad(local.getUTCSeconds());
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}+08:00`;
+}
+
 export interface OutputChannelLike {
   appendLine(value: string): void;
   show(): void;
@@ -60,7 +75,8 @@ export function redactSensitiveText(value: string): string {
 }
 
 export function toLogLine(entry: RequestLogEntry): string {
-  const ts = new Date().toISOString();
+  // 固定使用东八区时间显示，例如 2026-06-22T21:35:09+08:00。
+  const ts = formatBeijingTimestamp(new Date());
   const method = entry.method;
   const path = entry.path;
   const status = entry.status ?? '-';

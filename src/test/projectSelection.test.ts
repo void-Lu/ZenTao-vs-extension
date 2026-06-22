@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ProjectListUnavailableError, ensureProjectId, mapProjectQuickPickItems, parseManualProjectId, reselectProject } from './projectSelection';
+import { ProjectListUnavailableError, ensureProjectId, mapProjectQuickPickItems, parseManualProjectId, reselectProject } from '../projectSelection';
 
 function configuration() {
   const updates: Array<{ key: string; value: unknown; target: unknown }> = [];

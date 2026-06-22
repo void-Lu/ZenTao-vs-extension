@@ -6,7 +6,7 @@ const zentaoClientMock = vi.hoisted(() => ({
   getStory: undefined as undefined | ((id: number) => Promise<unknown>)
 }));
 
-vi.mock('./zentaoClient', () => {
+vi.mock('../zentaoClient', () => {
   const instances: Array<{ options: { baseUrl: string; timeoutMs: number } }> = [];
   class ZenTaoClient {
     constructor(public readonly options: { baseUrl: string; timeoutMs: number }) {
@@ -37,7 +37,7 @@ vi.mock('./zentaoClient', () => {
   return { ZenTaoClient, __instances: instances };
 });
 
-vi.mock('./loadProjectData', () => ({
+vi.mock('../loadProjectData', () => ({
   loadProjectData: vi.fn(async (_client: unknown, projectId: number) => ({
     project: { id: projectId, name: `Project ${projectId}`, raw: {} },
     stories: [],
@@ -47,7 +47,7 @@ vi.mock('./loadProjectData', () => ({
 }));
 
 
-const root = resolve(__dirname, '..');
+const root = resolve(__dirname, '..', '..');
 
 describe('extension scaffold', () => {
   test('uses an SVG resource for the Activity Bar icon', () => {
@@ -161,8 +161,8 @@ describe('extension scaffold', () => {
       env: { clipboard: { writeText: vi.fn() } },
       ConfigurationTarget: { Global: true, Workspace: false }
     }));
-    const extension = await import('./extension');
-    const { loadProjectData } = await import('./loadProjectData');
+    const extension = await import('../extension');
+    const { loadProjectData } = await import('../loadProjectData');
 
     extension.activate({ secrets: { get: async (key: string) => key.startsWith('zentao.token') ? 'token-1' : undefined, store: async () => undefined, delete: async () => undefined }, subscriptions: [], extensionUri: {} } as any);
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -221,7 +221,7 @@ describe('extension scaffold', () => {
       Uri: { parse },
       ConfigurationTarget: { Global: true, Workspace: false }
     }));
-    const extension = await import('./extension');
+    const extension = await import('../extension');
 
     extension.activate({ secrets: { get: async (key: string) => key.startsWith('zentao.token') ? 'token-1' : undefined, store: async () => undefined, delete: async () => undefined }, subscriptions: [], extensionUri: {} } as any);
     await commands.get('zentao.openExternal')?.({ kind: 'story', story: { id: 101 } });
@@ -279,13 +279,14 @@ describe('extension scaffold', () => {
       env: { clipboard: { writeText: vi.fn() } },
       ConfigurationTarget: { Global: 'global', Workspace: 'workspace' }
     }));
-    const extension = await import('./extension');
+    const extension = await import('../extension');
 
     extension.activate({ secrets: { get: async () => undefined, store: async () => undefined, delete: async () => undefined }, subscriptions: [], extensionUri: {} } as any);
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(updates).toEqual([
+      { key: 'account', value: 'alice', target: 'global' },
       { key: 'baseUrl', value: 'https://zentao.example.com/', target: 'global' },
       { key: 'projectId', value: 1, target: 'workspace' }
     ]);
@@ -322,6 +323,9 @@ describe('extension scaffold', () => {
             if (key === 'projectId') {
               return values.projectId as T;
             }
+            if (key === 'account') {
+              return 'alice' as T;
+            }
             return undefined;
           },
           inspect: <T,>(key: string): { globalValue?: T; workspaceValue?: T } | undefined => key === 'baseUrl'
@@ -354,7 +358,7 @@ describe('extension scaffold', () => {
       env: { clipboard: { writeText: vi.fn() } },
       ConfigurationTarget: { Global: 'global', Workspace: 'workspace' }
     }));
-    vi.doMock('./loadProjectData', () => ({
+    vi.doMock('../loadProjectData', () => ({
       loadProjectData: vi.fn(async (_client: unknown, projectId: number) => {
         events.push(`load:${projectId}`);
         return {
@@ -365,9 +369,10 @@ describe('extension scaffold', () => {
         };
       })
     }));
-    const extension = await import('./extension');
+    const extension = await import('../extension');
 
     extension.activate({ secrets: { get: async (key: string) => key.startsWith('zentao.token') ? 'token-1' : undefined, store: async () => undefined, delete: async () => undefined }, subscriptions: [], extensionUri: {} } as any);
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -436,8 +441,8 @@ describe('extension scaffold', () => {
       ConfigurationTarget: { Global: 'global', Workspace: 'workspace' }
     }));
     const loadProjectData = vi.fn();
-    vi.doMock('./loadProjectData', () => ({ loadProjectData }));
-    const extension = await import('./extension');
+    vi.doMock('../loadProjectData', () => ({ loadProjectData }));
+    const extension = await import('../extension');
 
     extension.activate({ secrets: { get: async () => undefined, store: async () => undefined, delete: async () => undefined }, subscriptions: [], extensionUri: {} } as any);
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -460,7 +465,7 @@ describe('extension scaffold', () => {
     const treeStates: unknown[] = [];
     const closedDetails: string[] = [];
     let capturedOpenDetail: ((type: 'story' | 'task', id: number) => Promise<void>) | undefined;
-    vi.doMock('./detailPanel', () => ({
+    vi.doMock('../detailPanel', () => ({
       DetailPanel: class {
         constructor(_extensionUri: unknown, _attachmentService: unknown, openDetail: (type: 'story' | 'task', id: number) => Promise<void>) {
           capturedOpenDetail = openDetail;
@@ -505,8 +510,8 @@ describe('extension scaffold', () => {
       env: { clipboard: { writeText: vi.fn() } },
       ConfigurationTarget: { Global: true, Workspace: false }
     }));
-    vi.doMock('./treeProvider', async () => {
-      const actual = await vi.importActual<typeof import('./treeProvider')>('./treeProvider');
+    vi.doMock('../treeProvider', async () => {
+      const actual = await vi.importActual<typeof import('../treeProvider')>('../treeProvider');
       return {
         ...actual,
         ZenTaoTreeProvider: class extends actual.ZenTaoTreeProvider {
@@ -517,7 +522,7 @@ describe('extension scaffold', () => {
         }
       };
     });
-    vi.doMock('./loadProjectData', () => ({
+    vi.doMock('../loadProjectData', () => ({
       loadProjectData: vi.fn(async (_client: unknown, projectId: number) => ({
         project: { id: projectId, name: `Project ${projectId}`, raw: {} },
         stories: [],
@@ -525,7 +530,7 @@ describe('extension scaffold', () => {
         partialTaskFailure: false
       }))
     }));
-    const extension = await import('./extension');
+    const extension = await import('../extension');
 
     extension.activate({ secrets: { get: async (key: string) => key.startsWith('zentao.token') ? 'token-1' : undefined, store: async () => undefined, delete: async () => undefined }, subscriptions: [], extensionUri: {} } as any);
     await commands.get('zentao.openDetail')?.('story', 1);
@@ -543,7 +548,7 @@ describe('extension scaffold', () => {
     const commands = new Map<string, (...args: unknown[]) => unknown>();
     const treeStates: unknown[] = [];
     const closedDetails: string[] = [];
-    vi.doMock('./detailPanel', () => ({
+    vi.doMock('../detailPanel', () => ({
       DetailPanel: class {
         constructor(_extensionUri: unknown, _attachmentService: unknown, _openDetail: (type: 'story' | 'task', id: number) => Promise<void>) {}
         isOpen() { return true; }
@@ -586,8 +591,8 @@ describe('extension scaffold', () => {
       env: { clipboard: { writeText: vi.fn() } },
       ConfigurationTarget: { Global: true, Workspace: false }
     }));
-    vi.doMock('./treeProvider', async () => {
-      const actual = await vi.importActual<typeof import('./treeProvider')>('./treeProvider');
+    vi.doMock('../treeProvider', async () => {
+      const actual = await vi.importActual<typeof import('../treeProvider')>('../treeProvider');
       return {
         ...actual,
         ZenTaoTreeProvider: class extends actual.ZenTaoTreeProvider {
@@ -598,7 +603,7 @@ describe('extension scaffold', () => {
         }
       };
     });
-    vi.doMock('./loadProjectData', () => ({
+    vi.doMock('../loadProjectData', () => ({
       loadProjectData: vi.fn(async (_client: unknown, projectId: number) => {
         if (projectId === 2) {
           throw new Error('load failed');
@@ -611,7 +616,7 @@ describe('extension scaffold', () => {
         };
       })
     }));
-    const extension = await import('./extension');
+    const extension = await import('../extension');
 
     extension.activate({ secrets: { get: async (key: string) => key.startsWith('zentao.token') ? 'token-1' : undefined, store: async () => undefined, delete: async () => undefined }, subscriptions: [], extensionUri: {} } as any);
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -667,7 +672,7 @@ describe('extension scaffold', () => {
       env: { clipboard: { writeText: vi.fn() } },
       ConfigurationTarget: { Global: true, Workspace: false }
     }));
-    const extension = await import('./extension');
+    const extension = await import('../extension');
 
     extension.activate({ secrets: { get: async (key: string) => key.startsWith('zentao.token') ? 'token-1' : undefined, store: async () => undefined, delete: async () => undefined }, subscriptions: [], extensionUri: {} } as any);
     await commands.get('zentao.openDetail')?.('story', 628);
@@ -723,13 +728,14 @@ describe('extension scaffold', () => {
       env: { clipboard: { writeText: vi.fn() } },
       ConfigurationTarget: { Global: true, Workspace: false }
     }));
-    const extension = await import('./extension');
+    const extension = await import('../extension');
 
     extension.activate({ secrets: { get: async () => undefined, store: async () => undefined, delete: async () => undefined }, subscriptions: [], extensionUri: {} } as any);
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(updates).toEqual([
+      { key: 'account', value: 'alice' },
       { key: 'baseUrl', value: 'https://zentao.example.com/' },
       { key: 'projectId', value: 1 }
     ]);
@@ -775,7 +781,7 @@ describe('extension scaffold', () => {
       env: { clipboard: { writeText: vi.fn() } },
       ConfigurationTarget: { Global: 'global', Workspace: 'workspace' }
     }));
-    const extension = await import('./extension');
+    const extension = await import('../extension');
 
     expect(() => extension.activate({ secrets: { get: async (key: string) => key.startsWith('zentao.token') ? 'token-1' : undefined, store: async () => undefined, delete: async () => undefined }, subscriptions: [], extensionUri: {} } as any)).not.toThrow();
     expect(commands.has('zentao.reconnect')).toBe(true);
@@ -783,7 +789,7 @@ describe('extension scaffold', () => {
 
   test('recreates the ZenTao client when connection settings change', async () => {
     vi.resetModules();
-    const values = { baseUrl: 'https://one.example.com/', projectId: 1, requestTimeout: 5000 };
+    const values = { baseUrl: 'https://one.example.com/', projectId: 1, requestTimeout: 5000, account: 'alice' };
     const commands = new Map<string, (...args: unknown[]) => unknown>();
     vi.doMock('vscode', () => ({
       window: {
@@ -818,17 +824,18 @@ describe('extension scaffold', () => {
       env: { clipboard: { writeText: vi.fn() } },
       ConfigurationTarget: { Global: true, Workspace: false }
     }));
-    const extension = await import('./extension');
-    const clientModule = await import('./zentaoClient') as unknown as { __instances: Array<{ options: { baseUrl: string } }> };
+    const extension = await import('../extension');
+    const clientModule = await import('../zentaoClient') as unknown as { __instances: Array<{ options: { baseUrl: string } }> };
 
     extension.activate({ secrets: { get: async (key: string) => key.startsWith('zentao.token') ? 'token-1' : undefined, store: async () => undefined, delete: async () => undefined }, subscriptions: [], extensionUri: {} } as any);
     await commands.get('zentao.refresh')?.();
     values.baseUrl = 'https://two.example.com/';
     await commands.get('zentao.refresh')?.();
 
-    expect(clientModule.__instances.map((instance) => instance.options.baseUrl).slice(-2)).toEqual([
-      'https://one.example.com/',
-      'https://two.example.com/'
-    ]);
+    // getAdminClient() creates both personalClient + adminClient (2 instances per refresh)
+    const baseUrls = clientModule.__instances.map((instance) => instance.options.baseUrl);
+    expect(baseUrls).toContain('https://one.example.com/');
+    expect(baseUrls).toContain('https://two.example.com/');
+    expect(baseUrls[baseUrls.length - 1]).toBe('https://two.example.com/');
   });
 });

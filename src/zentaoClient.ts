@@ -8,6 +8,9 @@ export interface ZenTaoClientOptions {
   refreshToken?(): Promise<string | undefined>;
   logger: RequestLogger;
   fetch?: typeof fetch;
+  // 401 时使用 refreshToken 自动重登并重试原请求的最大次数（默认 3）。
+  // 仅对 401 生用；非 401 错误不会触发重试。
+  maxUnauthorizedRetries?: number;
 }
 
 export class ZenTaoApiError extends Error {
@@ -157,13 +160,15 @@ export class ZenTaoClient {
     return resp.json() as Promise<T>;
   }
 
-  private async rawRequest(path: string, init: RequestInit & { withoutToken?: boolean }, retryUnauthorized = true, tokenOverride?: string): Promise<Response> {
+  private async rawRequest(path: string, init: RequestInit & { withoutToken?: boolean }, retryUnauthorized = true, tokenOverride?: string, unauthorizedRetries?: number): Promise<Response> {
     const { withoutToken, ...fetchInit } = init;
     const method = init.method ?? 'GET';
     const url = this.buildUrl(path);
     const started = Date.now();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs);
+    const maxRetries = this.options.maxUnauthorizedRetries ?? 3;
+    const remainingRetries = unauthorizedRetries ?? maxRetries;
 
     try {
       const headers = new Headers(init.headers);
@@ -190,10 +195,10 @@ export class ZenTaoClient {
       this.options.logger.log({ method, path: `/api.php/v1/${path}`, status: (response as any).status, durationMs: Date.now() - started });
 
       if (!(response as any).ok) {
-        if ((response as any).status === 401 && retryUnauthorized && !withoutToken && this.options.refreshToken) {
+        if ((response as any).status === 401 && retryUnauthorized && !withoutToken && this.options.refreshToken && remainingRetries > 0) {
           const refreshedToken = await this.options.refreshToken();
           if (refreshedToken) {
-            return this.rawRequest(path, init, false, refreshedToken);
+            return this.rawRequest(path, init, true, refreshedToken, remainingRetries - 1);
           }
         }
         throw new ZenTaoApiError(`ZenTao request failed with status ${(response as any).status}`, (response as any).status, redactSensitiveText(path));

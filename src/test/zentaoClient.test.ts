@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import RequestLogger from './requestLogger';
-import { ZenTaoClient } from './zentaoClient';
+import RequestLogger from '../requestLogger';
+import { ZenTaoClient } from '../zentaoClient';
 
 function jsonResponse(body: unknown, status = 200) {
   return {
@@ -234,8 +234,69 @@ describe('ZenTaoClient', () => {
     expect(sentTokens).toEqual(['expired-token', 'fresh-token']);
   });
 
-  it('does not refresh token repeatedly when the retried request is still 401', async () => {
+  it('retries up to 3 times on 401 before giving up', async () => {
     const refreshToken = vi.fn(async () => 'fresh-token');
+    const client = new ZenTaoClient({
+      baseUrl: 'https://zentao.example.com/',
+      timeoutMs: 5000,
+      getToken: async () => 'expired-token',
+      setToken: async () => undefined,
+      refreshToken,
+      logger: new RequestLogger({ appendLine() {}, show() {} } as any),
+      fetch: async () => jsonResponse({ error: 'unauthorized' }, 401)
+    });
+
+    await expect(client.get('projects/123')).rejects.toMatchObject({ status: 401 });
+    // 初次请求 + 3 次自动重登重试 = refreshToken 调用 3 次。
+    expect(refreshToken).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not retry on non-401 errors', async () => {
+    const refreshToken = vi.fn(async () => 'fresh-token');
+    const client = new ZenTaoClient({
+      baseUrl: 'https://zentao.example.com/',
+      timeoutMs: 5000,
+      getToken: async () => 'expired-token',
+      setToken: async () => undefined,
+      refreshToken,
+      logger: new RequestLogger({ appendLine() {}, show() {} } as any),
+      fetch: async () => jsonResponse({ error: 'forbidden' }, 403)
+    });
+
+    await expect(client.get('projects/123')).rejects.toMatchObject({ status: 403 });
+    expect(refreshToken).not.toHaveBeenCalled();
+  });
+
+  it('succeeds when a later 401 retry returns 200', async () => {
+    const refreshToken = vi.fn(async (call: number) => `fresh-${call}`);
+    let refreshCalls = 0;
+    const client = new ZenTaoClient({
+      baseUrl: 'https://zentao.example.com/',
+      timeoutMs: 5000,
+      getToken: async () => 'expired-token',
+      setToken: async () => undefined,
+      refreshToken: async () => {
+        refreshCalls += 1;
+        return refreshToken(refreshCalls);
+      },
+      logger: new RequestLogger({ appendLine() {}, show() {} } as any),
+      fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const headers = new Headers(init?.headers);
+        const token = headers.get('Token');
+        // 前两次重试仍 401，第三次成功。
+        if (token === 'expired-token' || token === 'fresh-1' || token === 'fresh-2') {
+          return jsonResponse({ error: 'unauthorized' }, 401);
+        }
+        return jsonResponse({ id: 123 });
+      }
+    });
+
+    await expect(client.get('projects/123')).resolves.toEqual({ id: 123 });
+    expect(refreshCalls).toBe(3);
+  });
+
+  it('stops retrying on 401 when refreshToken returns undefined', async () => {
+    const refreshToken = vi.fn(async () => undefined);
     const client = new ZenTaoClient({
       baseUrl: 'https://zentao.example.com/',
       timeoutMs: 5000,

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { runConnectionWizard } from './connectionWizard';
+import { runConnectionWizard } from '../connectionWizard';
 
 function configuration(projectTarget: unknown = false) {
   const updates: Array<{ key: string; value: unknown; target: unknown }> = [];

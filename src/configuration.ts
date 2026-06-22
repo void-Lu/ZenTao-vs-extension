@@ -1,12 +1,18 @@
 import { ConnectionConfig, ExtensionConfig, ZenTaoCredentials } from './types';
 
 // Public keys used for secret storage. Keep these stable as part of the public behavior.
-export const KEY_ACCOUNT = 'zentao.account';
+// 账号不再写入 SecretStorage；个人账号以 `zentao.account` 用户级配置为准。
 export const KEY_PASSWORD = 'zentao.password';
 export const KEY_TOKEN = 'zentao.token';
+// 管理员 token 使用独立存储键，避免覆盖个人账号 token。
+export const KEY_ADMIN_TOKEN = 'zentao.adminToken';
 
 function tokenKey(baseUrl?: string): string {
   return baseUrl ? `${KEY_TOKEN}.${Buffer.from(baseUrl).toString('base64url')}` : KEY_TOKEN;
+}
+
+function adminTokenKey(baseUrl?: string): string {
+  return baseUrl ? `${KEY_ADMIN_TOKEN}.${Buffer.from(baseUrl).toString('base64url')}` : KEY_ADMIN_TOKEN;
 }
 
 export interface InspectResultLike<T> {
@@ -108,6 +114,23 @@ export function readOptionalProjectId(configuration: WorkspaceConfigurationLike)
   return Number.isInteger(projectId) && projectId > 0 ? projectId : undefined;
 }
 
+// 个人账号读取：只以 `zentao.account` 用户级配置为准，不兼容旧 SecretStorage 账号。
+export function readAccount(configuration: WorkspaceConfigurationLike): string | undefined {
+  const account = configuration.get<string>('account');
+  return account && account.trim().length > 0 ? account.trim() : undefined;
+}
+
+export async function storeAccount(
+  configuration: WorkspaceConfigurationLike,
+  account: string,
+  globalTarget: unknown
+): Promise<void> {
+  if (!account || account.trim().length === 0) {
+    throw new Error('account is required');
+  }
+  await configuration.update?.('account', account.trim(), globalTarget);
+}
+
 export function readExtensionConfig(configuration: WorkspaceConfigurationLike): ExtensionConfig {
   const connection = readConnectionConfig(configuration);
   const projectId = readOptionalProjectId(configuration);
@@ -137,19 +160,16 @@ export class CredentialsStore {
   }
 
   async getCredentials(baseUrl?: string): Promise<ZenTaoCredentials> {
-    const [account, password, token] = await Promise.all([
-      this.secrets.get(KEY_ACCOUNT),
+    const [password, token] = await Promise.all([
       this.secrets.get(KEY_PASSWORD),
       this.secrets.get(tokenKey(baseUrl))
     ]);
-    return { account, password, token };
+    // 账号由调用方从 `zentao.account` 配置读取；这里不读取 SecretStorage 中的旧账号。
+    return { password, token };
   }
 
-  async storeLogin(account: string, password: string, token: string, baseUrl?: string): Promise<void> {
+  async storeLogin(password: string, token: string, baseUrl?: string): Promise<void> {
     // Input validation
-    if (!account || account.trim().length === 0) {
-      throw new Error('account is required');
-    }
     if (!password || password.length === 0) {
       throw new Error('password is required');
     }
@@ -158,24 +178,15 @@ export class CredentialsStore {
     }
 
     return this.runExclusive(async () => {
+      // 账号不再写入 SecretStorage；只持久化密码与 token。
       // Store sequentially to avoid partial writes from concurrent failures.
       // If any write fails, rollback by deleting all credential keys.
       try {
-        await this.secrets.store(KEY_ACCOUNT, account);
         await this.secrets.store(KEY_PASSWORD, password);
         await this.secrets.store(tokenKey(baseUrl), token);
       } catch (err) {
         // Attempt cleanup by deleting any keys that may have been written.
-        // If cleanup succeeds, rethrow the original error. If cleanup
-        // encounters failures, surface them together with the original
-        // error as an AggregateError so callers can observe both the write
-        // failure and the rollback failures.
         const rollbackErrors: any[] = [];
-        try {
-          await this.secrets.delete(KEY_ACCOUNT);
-        } catch (e) {
-          rollbackErrors.push(e);
-        }
         try {
           await this.secrets.delete(KEY_PASSWORD);
         } catch (e) {
@@ -196,6 +207,25 @@ export class CredentialsStore {
         const allErrors = [err, ...rollbackErrors];
         throw new AggregateError(allErrors, 'Failed to store credentials and rollback cleanup failed.');
       }
+    });
+  }
+
+  async getAdminToken(baseUrl?: string): Promise<string | undefined> {
+    return this.secrets.get(adminTokenKey(baseUrl));
+  }
+
+  async storeAdminToken(token: string, baseUrl?: string): Promise<void> {
+    if (!token || token.trim().length === 0) {
+      throw new Error('token is required');
+    }
+    return this.runExclusive(async () => {
+      await this.secrets.store(adminTokenKey(baseUrl), token);
+    });
+  }
+
+  async clearAdminToken(baseUrl?: string): Promise<void> {
+    return this.runExclusive(async () => {
+      await this.secrets.delete(adminTokenKey(baseUrl));
     });
   }
 

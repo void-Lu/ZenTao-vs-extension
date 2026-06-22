@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { loadProjectData } from './loadProjectData';
-import { ZenTaoClient } from './zentaoClient';
+import { loadProjectData } from '../loadProjectData';
+import { ZenTaoClient } from '../zentaoClient';
 
 describe('loadProjectData', () => {
   const delay = () => new Promise((resolve) => setTimeout(resolve, 0));

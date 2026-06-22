@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
-import { AttachmentService } from './attachmentService';
-import { ZenTaoClient } from './zentaoClient';
+import { AttachmentService } from '../attachmentService';
+import { ZenTaoClient } from '../zentaoClient';
 
 const writes: Array<{ path: string; bytes: number[] }> = [];
 

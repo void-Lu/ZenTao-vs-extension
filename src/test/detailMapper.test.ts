@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { escapedJson, toDetailViewModel } from './detailMapper';
-import { sanitizeRichHtml } from './html';
+import { escapedJson, toDetailViewModel } from '../detailMapper';
+import { sanitizeRichHtml } from '../html';
 
 describe('sanitizeRichHtml', () => {
   it('removes scripts and event handlers while keeping basic formatting', () => {

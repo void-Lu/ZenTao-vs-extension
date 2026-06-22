@@ -21,7 +21,7 @@ vi.mock('vscode', () => ({
   ViewColumn: { One: 1, Beside: 2 }
 }));
 
-vi.mock('./html', () => ({
+vi.mock('../html', () => ({
   escapeHtml: (value: unknown) => String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -32,7 +32,7 @@ vi.mock('./html', () => ({
   renderDetailHtml: vi.fn(() => '<html></html>')
 }));
 
-vi.mock('./markdownExport', () => ({
+vi.mock('../markdownExport', () => ({
   detailToMarkdown: vi.fn(() => '# exported\n'),
   markdownFileName: vi.fn(() => 'story-1-Item 1.md')
 }));
@@ -82,7 +82,7 @@ describe('DetailPanel', () => {
       reveal: vi.fn(),
       dispose: secondDispose
     });
-    const { DetailPanel } = await import('./detailPanel');
+    const { DetailPanel } = await import('../detailPanel');
     const panel = new DetailPanel({} as any, attachmentServiceFake() as any, vi.fn());
 
     panel.show(detail(1));
@@ -102,7 +102,7 @@ describe('DetailPanel', () => {
       reveal: vi.fn(),
       dispose: vi.fn()
     });
-    const { DetailPanel } = await import('./detailPanel');
+    const { DetailPanel } = await import('../detailPanel');
     const panel = new DetailPanel({} as any, attachmentServiceFake() as any, vi.fn());
 
     panel.show(detail(1));
@@ -130,7 +130,7 @@ describe('DetailPanel', () => {
       dispose: vi.fn()
     };
     createWebviewPanel.mockReturnValueOnce(firstPanel).mockReturnValueOnce(secondPanel);
-    const { DetailPanel } = await import('./detailPanel');
+    const { DetailPanel } = await import('../detailPanel');
     const panel = new DetailPanel({} as any, attachmentServiceFake() as any, vi.fn());
 
     panel.show(detail(1));
@@ -159,7 +159,7 @@ describe('DetailPanel', () => {
     const attachment = { id: 7, name: 'spec.docx', addedDate: '2026-05-21', raw: {} };
     const otherAttachment = { id: 8, name: 'image.png', addedDate: '2026-05-22', raw: {} };
     const attachmentService = attachmentServiceFake();
-    const { DetailPanel } = await import('./detailPanel');
+    const { DetailPanel } = await import('../detailPanel');
     const panel = new DetailPanel({} as any, attachmentService as any, vi.fn());
 
     panel.show({ ...detail(1), attachments: [attachment] });
@@ -185,7 +185,7 @@ describe('DetailPanel', () => {
       dispose: vi.fn()
     });
     const attachmentService = attachmentServiceFake();
-    const { DetailPanel } = await import('./detailPanel');
+    const { DetailPanel } = await import('../detailPanel');
     const panel = new DetailPanel({} as any, attachmentService as any, vi.fn());
 
     panel.show(detail(1));
@@ -214,7 +214,7 @@ describe('DetailPanel', () => {
       dispose: vi.fn()
     });
     writeFile.mockRejectedValue(new Error('disk full'));
-    const { DetailPanel } = await import('./detailPanel');
+    const { DetailPanel } = await import('../detailPanel');
     const panel = new DetailPanel({} as any, attachmentServiceFake() as any, vi.fn());
 
     panel.show(detail(1));
@@ -237,7 +237,7 @@ describe('DetailPanel', () => {
       dispose: vi.fn()
     });
     const openDetail = vi.fn();
-    const { DetailPanel } = await import('./detailPanel');
+    const { DetailPanel } = await import('../detailPanel');
     const panel = new DetailPanel({} as any, attachmentServiceFake() as any, openDetail);
 
     panel.show(detail(1));
@@ -273,7 +273,7 @@ describe('DetailPanel', () => {
     const attachment = { id: 7, name: 'notes.txt', addedDate: '2026-05-25', raw: { id: 7, name: 'notes.txt' } };
     const attachmentService = attachmentServiceFake();
     attachmentService.readBytes.mockResolvedValue(Buffer.from('Hello preview', 'utf8'));
-    const { DetailPanel } = await import('./detailPanel');
+    const { DetailPanel } = await import('../detailPanel');
     const panel = new DetailPanel({} as any, attachmentService as any, vi.fn());
 
     panel.show({ ...detail(1), attachments: [attachment] });
@@ -295,7 +295,7 @@ describe('DetailPanel', () => {
 
 describe('htmlToMarkdown', () => {
   it('converts a simple HTML table to markdown table', async () => {
-    const { htmlToMarkdown } = await import('./detailPanel');
+    const { htmlToMarkdown } = await import('../detailPanel');
     const html = '<table><tr><th>Name</th><th>Age</th></tr><tr><td>Alice</td><td>30</td></tr><tr><td>Bob</td><td>25</td></tr></table>';
     const result = htmlToMarkdown(html);
     expect(result).toContain('| Name | Age |');
@@ -305,7 +305,7 @@ describe('htmlToMarkdown', () => {
   });
 
   it('converts tables with section headings and pre blocks', async () => {
-    const { htmlToMarkdown } = await import('./detailPanel');
+    const { htmlToMarkdown } = await import('../detailPanel');
     const html = '<section><h3>Sheet1</h3><table><tr><td>ID</td><td>Val</td></tr><tr><td>1</td><td>ok</td></tr></table></section>';
     const result = htmlToMarkdown(html);
     expect(result).toContain('### Sheet1');
@@ -315,14 +315,14 @@ describe('htmlToMarkdown', () => {
   });
 
   it('unescapes HTML entities in table cells', async () => {
-    const { htmlToMarkdown } = await import('./detailPanel');
+    const { htmlToMarkdown } = await import('../detailPanel');
     const html = '<table><tr><th>Item</th></tr><tr><td>a &amp; b &lt; c</td></tr></table>';
     const result = htmlToMarkdown(html);
     expect(result).toContain('a & b < c');
   });
 
   it('normalizes column count when rows have different lengths', async () => {
-    const { htmlToMarkdown } = await import('./detailPanel');
+    const { htmlToMarkdown } = await import('../detailPanel');
     const html = '<table><tr><th>A</th><th>B</th></tr><tr><td>1</td></tr></table>';
     const result = htmlToMarkdown(html);
     expect(result).toContain('| A | B |');
@@ -330,28 +330,28 @@ describe('htmlToMarkdown', () => {
   });
 
   it('ignores empty tables instead of throwing during preview markdown export', async () => {
-    const { htmlToMarkdown } = await import('./detailPanel');
+    const { htmlToMarkdown } = await import('../detailPanel');
 
     expect(() => htmlToMarkdown('<section><h3>Sheet1</h3><table></table></section>')).not.toThrow();
     expect(htmlToMarkdown('<section><h3>Sheet1</h3><table></table></section>')).toContain('### Sheet1');
   });
 
   it('ignores table rows without cells instead of throwing during preview markdown export', async () => {
-    const { htmlToMarkdown } = await import('./detailPanel');
+    const { htmlToMarkdown } = await import('../detailPanel');
 
     expect(() => htmlToMarkdown('<table><tr></tr></table>')).not.toThrow();
     expect(htmlToMarkdown('<table><tr></tr></table>').trim()).toBe('');
   });
 
   it('preserves pre blocks as code fences', async () => {
-    const { htmlToMarkdown } = await import('./detailPanel');
+    const { htmlToMarkdown } = await import('../detailPanel');
     const html = '<pre>line 1\nline 2</pre>';
     const result = htmlToMarkdown(html);
     expect(result).toContain('```\nline 1\nline 2\n```');
   });
 
   it('escapes pipe characters in table cells', async () => {
-    const { htmlToMarkdown } = await import('./detailPanel');
+    const { htmlToMarkdown } = await import('../detailPanel');
     const html = '<table><tr><th>值</th></tr><tr><td>a|b</td></tr></table>';
     const result = htmlToMarkdown(html);
     expect(result).toContain('| a\\|b |');

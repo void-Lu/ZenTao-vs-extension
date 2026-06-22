@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderDetailHtml, rewriteContentImageUrls } from './html';
+import { renderDetailHtml, rewriteContentImageUrls } from '../html';
 
 describe('renderDetailHtml', () => {
   it('renders attachments before history and includes CSP', () => {

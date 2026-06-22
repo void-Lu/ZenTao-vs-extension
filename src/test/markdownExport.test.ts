@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { detailToMarkdown, markdownFileName, richHtmlToMarkdown } from './markdownExport';
-import { DetailViewModel } from './types';
+import { detailToMarkdown, markdownFileName, richHtmlToMarkdown } from '../markdownExport';
+import { DetailViewModel } from '../types';
 
 function detail(): DetailViewModel {
   return {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { transformTreeData, TreeSortMode } from './treeTransform';
-import { TreeDataState } from './types';
+import { transformTreeData, TreeSortMode } from '../treeTransform';
+import { TreeDataState } from '../types';
 
 function state(): TreeDataState {
   return {

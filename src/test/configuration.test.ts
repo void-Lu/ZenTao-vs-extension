@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { migrateLegacyBaseUrlToGlobal, normalizeBaseUrl, readConnectionConfig, readExtensionConfig, readOptionalProjectId, CredentialsStore, KEY_ACCOUNT, KEY_PASSWORD, KEY_TOKEN } from './configuration';
+import { migrateLegacyBaseUrlToGlobal, normalizeBaseUrl, readConnectionConfig, readExtensionConfig, readOptionalProjectId, readAccount, storeAccount, CredentialsStore, KEY_PASSWORD, KEY_TOKEN, KEY_ADMIN_TOKEN } from '../configuration';
 
 class InMemorySecrets {
   private storage = new Map<string, string>();
@@ -258,24 +258,35 @@ describe('readExtensionConfig', () => {
 });
 
 describe('CredentialsStore', () => {
-  it('stores and retrieves credentials successfully', async () => {
+  it('stores and retrieves credentials successfully without persisting account to SecretStorage', async () => {
     const mem = new InMemorySecrets();
     const store = new CredentialsStore(mem as any);
 
-    await store.storeLogin('alice', 's3cr3t', 'tok-1', 'https://zentao.example.com/');
+    // storeLogin 不再接收 account；账号由配置层维护。
+    await store.storeLogin('s3cr3t', 'tok-1', 'https://zentao.example.com/');
     const creds = await store.getCredentials('https://zentao.example.com/');
-    expect(creds.account).toBe('alice');
+    expect(creds.account).toBeUndefined();
     expect(creds.password).toBe('s3cr3t');
     expect(creds.token).toBe('tok-1');
     expect((await store.getCredentials('https://other.example.com/')).token).toBeUndefined();
   });
 
+  it('does not read legacy SecretStorage account as the current account', async () => {
+    const mem = new InMemorySecrets();
+    // 模拟旧版本写入的 account secret。
+    await mem.store('zentao.account', 'legacy-user');
+    const store = new CredentialsStore(mem as any);
+
+    const creds = await store.getCredentials();
+    expect(creds.account).toBeUndefined();
+  });
+
   it('rolls back when a store operation fails', async () => {
-    // fail on password write (middle operation)
+    // fail on password write (first operation)
     const mem = new InMemorySecrets(KEY_PASSWORD);
     const store = new CredentialsStore(mem as any);
 
-    await expect(store.storeLogin('bob', 'hunter2', 'tok-2')).rejects.toThrow('simulated store failure');
+    await expect(store.storeLogin('hunter2', 'tok-2')).rejects.toThrow('simulated store failure');
 
     const creds = await store.getCredentials();
     // All keys should have been removed by the rollback
@@ -285,14 +296,14 @@ describe('CredentialsStore', () => {
   });
 
   it('surfaces rollback delete failures as AggregateError', async () => {
-    // fail on password write (middle operation) and fail to delete account during rollback
-    const mem = new InMemorySecrets(KEY_PASSWORD, KEY_ACCOUNT);
+    // fail on password write (first operation) and fail to delete password during rollback
+    const mem = new InMemorySecrets(KEY_PASSWORD, KEY_PASSWORD);
     const store = new CredentialsStore(mem as any);
 
-    await expect(store.storeLogin('dave', 'pw', 'tok-3')).rejects.toBeInstanceOf(AggregateError);
+    await expect(store.storeLogin('pw', 'tok-3')).rejects.toBeInstanceOf(AggregateError);
 
     try {
-      await store.storeLogin('dave', 'pw', 'tok-3');
+      await store.storeLogin('pw', 'tok-3');
     } catch (err: any) {
       expect(err).toBeInstanceOf(AggregateError);
       expect(err.message).toBe('Failed to store credentials and rollback cleanup failed.');
@@ -308,9 +319,8 @@ describe('CredentialsStore', () => {
     const mem = new InMemorySecrets();
     const store = new CredentialsStore(mem as any);
 
-    await expect(store.storeLogin('   ', 'pw', 'tok')).rejects.toThrow('account is required');
-    await expect(store.storeLogin('alice', '', 'tok')).rejects.toThrow('password is required');
-    await expect(store.storeLogin('alice', 'pw', '   ')).rejects.toThrow('token is required');
+    await expect(store.storeLogin('', 'tok')).rejects.toThrow('password is required');
+    await expect(store.storeLogin('pw', '   ')).rejects.toThrow('token is required');
 
     await expect(store.storeToken('   ')).rejects.toThrow('token is required');
   });
@@ -343,16 +353,68 @@ describe('CredentialsStore', () => {
     const store = new CredentialsStore(mem as any);
 
     // start storeLogin then immediately start storeToken concurrently
-    const p1 = store.storeLogin('carol', 'pw', 'tok-A');
+    const p1 = store.storeLogin('pw', 'tok-A');
     const p2 = store.storeToken('tok-B');
 
     await Promise.all([p1, p2]);
 
-    // Expect that the three stores for storeLogin happened before the concurrent storeToken
-    const expectedPrefix = [`store:${KEY_ACCOUNT}:carol`, `store:${KEY_PASSWORD}:pw`, `store:${KEY_TOKEN}:tok-A`, `store:${KEY_TOKEN}:tok-B`];
+    // storeLogin 不再写入 account；只写 password 与 token。
+    const expectedPrefix = [`store:${KEY_PASSWORD}:pw`, `store:${KEY_TOKEN}:tok-A`, `store:${KEY_TOKEN}:tok-B`];
     expect(mem.ops).toEqual(expectedPrefix);
     // Final stored token should be the one from the second operation (tok-B)
     const creds = await store.getCredentials();
     expect(creds.token).toBe('tok-B');
+  });
+
+  it('stores and retrieves the admin token using a dedicated key', async () => {
+    const mem = new InMemorySecrets();
+    const store = new CredentialsStore(mem as any);
+
+    await store.storeAdminToken('admin-tok-1', 'https://zentao.example.com/');
+    expect(await store.getAdminToken('https://zentao.example.com/')).toBe('admin-tok-1');
+    // 管理员 token 不应覆盖个人 token。
+    await store.storeToken('personal-tok-1', 'https://zentao.example.com/');
+    expect((await store.getCredentials('https://zentao.example.com/')).token).toBe('personal-tok-1');
+    expect(await store.getAdminToken('https://zentao.example.com/')).toBe('admin-tok-1');
+  });
+});
+
+describe('account configuration', () => {
+  it('reads zentao.account from user configuration only', () => {
+    expect(readAccount({
+      get<T>(key: string): T | undefined {
+        return key === 'account' ? ('alice' as T) : undefined;
+      }
+    })).toBe('alice');
+
+    expect(readAccount({
+      get<T>(): T | undefined { return undefined; }
+    })).toBeUndefined();
+  });
+
+  it('ignores blank account values', () => {
+    expect(readAccount({
+      get<T>(): T | undefined { return '   ' as T; }
+    })).toBeUndefined();
+  });
+
+  it('writes the account to the global target via storeAccount', async () => {
+    const updates: Array<{ key: string; value: unknown; target: unknown }> = [];
+    const configuration = {
+      get: () => undefined,
+      update: async (key: string, value: unknown, target: unknown) => {
+        updates.push({ key, value, target });
+      }
+    };
+
+    await storeAccount(configuration as any, 'bob', 'global-target');
+
+    expect(updates).toEqual([{ key: 'account', value: 'bob', target: 'global-target' }]);
+  });
+
+  it('rejects empty account values in storeAccount', async () => {
+    const configuration = { get: () => undefined, update: vi.fn(async () => undefined) };
+    await expect(storeAccount(configuration as any, '  ', 'global')).rejects.toThrow('account is required');
+    expect(configuration.update).not.toHaveBeenCalled();
   });
 });

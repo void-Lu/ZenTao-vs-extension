@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { renderAttachmentPreview, maxPreviewBytes } from './attachmentPreview';
+import { renderAttachmentPreview, maxPreviewBytes } from '../attachmentPreview';
 
 const attachment = { id: 1, name: 'file.txt', size: '1K', addedDate: '2026-05-21 10:00:00', raw: { token: 'secret', safe: 'ok' } };
 
