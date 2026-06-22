@@ -1,6 +1,6 @@
 # ZenTao VS Extension
 
-## v0.10.0 更新
+## v1.0.0 更新
 
 - 个人账号仅用于拉取项目列表和选择项目；项目数据、需求列表、任务列表和详情改由插件内置管理员账号读取。
 - 新增 `zentao.account` 用户级配置；账号不再写入 Secret Storage，密码和 token 仍存放在 Secret Storage。
@@ -64,12 +64,12 @@ npx @vscode/vsce package --allow-missing-repository --skip-license
 
 在 VS Code 设置中配置以下 `zentao.*` 选项：
 
-| 配置项 | 类型 | 默认值 | 说明 |
-| --- | --- | --- | --- |
-| `zentao.baseUrl` | string | `""` | 禅道服务地址，例如 `https://zentao.example.com/`。用户级配置。 |
-| `zentao.account` | string | `""` | 个人禅道账号。仅用于拉取项目列表和选择项目；项目数据、需求、任务和详情由插件内置管理员账号读取。用户级配置。 |
-| `zentao.projectId` | number | `0` | 当前工作区使用的禅道项目 ID。缺失或无效时，插件会引导选择或手动输入。工作区级配置。 |
-| `zentao.requestTimeout` | number | `15000` | 请求超时时间，单位毫秒，最小值 `1000`。 |
+| 配置项                    | 类型   | 默认值    | 说明                                                                                                         |
+| ------------------------- | ------ | --------- | ------------------------------------------------------------------------------------------------------------ |
+| `zentao.baseUrl`        | string | `""`    | 禅道服务地址，例如 `https://zentao.example.com/`。用户级配置。                                             |
+| `zentao.account`        | string | `""`    | 个人禅道账号。仅用于拉取项目列表和选择项目；项目数据、需求、任务和详情由插件内置管理员账号读取。用户级配置。 |
+| `zentao.projectId`      | number | `0`     | 当前工作区使用的禅道项目 ID。缺失或无效时，插件会引导选择或手动输入。工作区级配置。                          |
+| `zentao.requestTimeout` | number | `15000` | 请求超时时间，单位毫秒，最小值 `1000`。                                                                    |
 
 插件会把个人账号密码、个人 token 和管理员 token 存储在 VS Code Secret Storage 中，不会写入普通配置文件。个人账号本身写入 `zentao.account` 用户级配置；管理员账号/密码写死在插件源码中，不会进入日志或普通配置。
 
@@ -84,16 +84,16 @@ npx @vscode/vsce package --allow-missing-repository --skip-license
 
 ## 常用操作
 
-| 操作 | 位置 | 说明 |
-| --- | --- | --- |
-| 重新连接 | ZenTao 视图标题栏 | 重新输入账号密码并获取 token。 |
-| 刷新禅道数据 | ZenTao 视图标题栏 | 重新加载项目、需求和任务。 |
-| 请求日志 | ZenTao 视图标题栏 | 打开 `ZenTao Requests` 输出通道。 |
-| 打开详情 | 需求/任务节点 | 在 Webview 中查看详情。 |
-| 导出 MD | 详情页顶部按钮 | 将当前详情页展示内容导出到工作区根目录 `requirements/` 下。 |
-| 图片预览/下载 | 详情页富文本图片 | 点击图片放大预览，支持缩放与拖拽，并可在预览层保存图片。 |
-| 复制编号 | 需求/任务节点右键菜单 | 复制当前需求或任务编号。 |
-| 在浏览器打开 | 需求/任务节点右键菜单 | 使用默认浏览器打开禅道页面。 |
+| 操作          | 位置                  | 说明                                                          |
+| ------------- | --------------------- | ------------------------------------------------------------- |
+| 重新连接      | ZenTao 视图标题栏     | 重新输入账号密码并获取 token。                                |
+| 刷新禅道数据  | ZenTao 视图标题栏     | 重新加载项目、需求和任务。                                    |
+| 请求日志      | ZenTao 视图标题栏     | 打开 `ZenTao Requests` 输出通道。                           |
+| 打开详情      | 需求/任务节点         | 在 Webview 中查看详情。                                       |
+| 导出 MD       | 详情页顶部按钮        | 将当前详情页展示内容导出到工作区根目录 `requirements/` 下。 |
+| 图片预览/下载 | 详情页富文本图片      | 点击图片放大预览，支持缩放与拖拽，并可在预览层保存图片。      |
+| 复制编号      | 需求/任务节点右键菜单 | 复制当前需求或任务编号。                                      |
+| 在浏览器打开  | 需求/任务节点右键菜单 | 使用默认浏览器打开禅道页面。                                  |
 
 ## 附件下载与预览
 
@@ -101,15 +101,15 @@ npx @vscode/vsce package --allow-missing-repository --skip-license
 
 附件表提供"预览"入口，点击后可在 VS Code 内新开面板查看附件正文内容，支持以下格式：
 
-| 格式 | 说明 |
-| --- | --- |
-| Excel（.xlsx / .xls） | 按工作表展示为 HTML 表格，支持合并单元格展开。 |
-| Word（.docx / .doc） | 提取文档正文并渲染为清洗后的 HTML。`.doc` 需要 `word-extractor` 依赖。 |
-| PDF | 按页提取文本并分区展示。 |
-| CSV | 解析为 HTML 表格展示。 |
-| TXT | 按 UTF-8 文本展示，保留换行。 |
-| Markdown（.md） | 解析为 HTML 后清洗展示。 |
-| 图片（.jpg / .png / .gif / .bmp / .svg / .webp 等） | 以内嵌 Base64 方式直接预览图片。 |
+| 格式                                                | 说明                                                                       |
+| --------------------------------------------------- | -------------------------------------------------------------------------- |
+| Excel（.xlsx / .xls）                               | 按工作表展示为 HTML 表格，支持合并单元格展开。                             |
+| Word（.docx / .doc）                                | 提取文档正文并渲染为清洗后的 HTML。`.doc` 需要 `word-extractor` 依赖。 |
+| PDF                                                 | 按页提取文本并分区展示。                                                   |
+| CSV                                                 | 解析为 HTML 表格展示。                                                     |
+| TXT                                                 | 按 UTF-8 文本展示，保留换行。                                              |
+| Markdown（.md）                                     | 解析为 HTML 后清洗展示。                                                   |
+| 图片（.jpg / .png / .gif / .bmp / .svg / .webp 等） | 以内嵌 Base64 方式直接预览图片。                                           |
 
 附件超过 10 MB 时不会预览，但仍可正常下载。
 
@@ -168,16 +168,16 @@ npm run release:check
 
 常用脚本：
 
-| 命令 | 说明 |
-| --- | --- |
-| `npm run check` | 运行 TypeScript 类型检查，不输出构建文件。 |
-| `npm run bundle` | 使用 esbuild 生成 VS Code 扩展运行入口 `out/extension.js`。 |
-| `npm run compile` | 运行类型检查并生成 bundle。 |
-| `npm run watch` | 以 watch 模式运行 TypeScript。 |
-| `npm test` | 运行全部 Vitest 测试。 |
-| `npm run verify` | 编译并运行完整测试套件。 |
-| `npm run package:vsix` | 编译并生成 VSIX 安装包。 |
-| `npm run release:check` | 编译、测试并生成 VSIX 安装包。 |
+| 命令                      | 说明                                                          |
+| ------------------------- | ------------------------------------------------------------- |
+| `npm run check`         | 运行 TypeScript 类型检查，不输出构建文件。                    |
+| `npm run bundle`        | 使用 esbuild 生成 VS Code 扩展运行入口 `out/extension.js`。 |
+| `npm run compile`       | 运行类型检查并生成 bundle。                                   |
+| `npm run watch`         | 以 watch 模式运行 TypeScript。                                |
+| `npm test`              | 运行全部 Vitest 测试。                                        |
+| `npm run verify`        | 编译并运行完整测试套件。                                      |
+| `npm run package:vsix`  | 编译并生成 VSIX 安装包。                                      |
+| `npm run release:check` | 编译、测试并生成 VSIX 安装包。                                |
 
 ## 版本
 
