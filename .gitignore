@@ -1,5 +1,6 @@
 .superpowers/
 .codegraph/
+.codebase-memory/
 node_modules/
 out/
 dist/

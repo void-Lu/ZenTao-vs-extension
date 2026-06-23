@@ -13,6 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run verify` — compile and run the full test suite.
 - `npm run release:check` — verify + package VSIX (full release prep).
 - `npx @vscode/vsce package --allow-missing-repository --skip-license` — compile (via `vscode:prepublish` hook) and create a local `.vsix` package. The repository currently has no `repository` metadata or license file, so keep these flags unless those files are added.
+- `npm run package:vsix` — shorthand for the above VSIX packaging command.
 - `npx vitest run src/zentaoClient.test.ts` — run one test file.
 - `npx vitest run -t "test name"` — run tests matching a name filter.
 - `npx vitest run src/extension.test.ts -t "not extensible" --reporter=verbose` — run a focused test with verbose output.
@@ -60,7 +61,9 @@ Both clients share the same `ZenTaoClient` class; they differ only in which cred
 12. `src/requestLogger.ts` writes redacted request diagnostics to the `ZenTao Requests` output channel. Timestamps are **fixed to UTC+8** (e.g. `2026-06-22T21:35:09+08:00`), not the host machine's timezone.
 13. `src/attachmentPreview.ts` parses attachment bytes for Excel (.xlsx/.xls), Word (.docx/.doc), PDF, CSV, TXT, Markdown, and image files, producing sanitized preview HTML. Heavy dependencies (`mammoth`, `pdf-parse`, `xlsx`, `word-extractor`, `markdown-it`) are lazy-loaded to avoid blocking extension activation. Image attachments produce base64 inline previews; their export button saves the original file directly to `docs/requirements/` instead of generating Markdown. Attachments over 10 MB are not previewed but can still be downloaded.
 
-Shared types are centralized in `src/types.ts`. Tests are colocated as `src/**/*.test.ts`; many files define small interfaces so tests can use VS Code-like fakes without running inside an extension host.
+Shared types are centralized in `src/types.ts`. The concurrency-limiting utility `settleWithConcurrency` is defined in `src/loadProjectData.ts` and reused wherever batch API calls are needed.
+
+Tests are colocated as `src/test/*.test.ts` (all under the `src/test/` subdirectory, not mixed with source files); many files define small interfaces so tests can use VS Code-like fakes without running inside an extension host.
 
 ## Build pipeline
 

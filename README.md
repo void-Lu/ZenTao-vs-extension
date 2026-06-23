@@ -1,21 +1,5 @@
 # ZenTao VS Extension
 
-## v1.0.0 更新
-
-- 个人账号仅用于拉取项目列表和选择项目；项目数据、需求列表、任务列表和详情改由插件内置管理员账号读取。
-- 新增 `zentao.account` 用户级配置；账号不再写入 Secret Storage，密码和 token 仍存放在 Secret Storage。
-- 管理员 token 使用独立的 Secret Storage 键，不会覆盖个人账号 token；管理员 token 失效时由内置管理员凭据静默刷新。
-- token 失效时，先用当前账号和已存密码自动重新登录最多 3 次；3 次都失败，或失败状态不是 401，再重新询问用户名和密码（仍不重新询问 URL）。
-- 已配置 URL、账号、项目 ID 时，普通刷新不再重复弹出 URL 输入框或完整首登流程；缺密码时只提示密码。
-- 请求日志时间固定使用东八区显示，例如 `2026-06-22T21:35:09+08:00`，不随宿主机器时区变化。
-
-## v0.9.0 更新
-
-- 需求列表会合并项目需求和产品需求；当同 ID 的项目需求字段为空时，会用产品需求中的非空字段补齐标题、优先级、状态和指派人等展示信息。
-- 当项目需求或产品需求列表为空、部分失败时，插件会从执行任务里的 `story` / `storyID` / `storyId` 提取需求 ID，并按 `/stories/{id}` 补全需求列表。
-- 项目执行任务、产品需求和按 ID 补需求的请求会限制并发，避免项目执行或关联产品较多时一次性打满禅道接口。
-- 需求详情页仍按需求 ID 单独请求 `/stories/{id}` 获取完整详情；列表数据只在详情接口失败时作为本地缓存兜底。
-
 ZenTao VS Extension 是一个 VS Code 插件，用于在编辑器内浏览禅道项目、需求和任务，并快速查看详情、复制编号、打开外部链接、下载附件、预览附件内容和导出详情内容。
 
 ## 功能特性
@@ -57,19 +41,19 @@ npm run compile
 如需生成本地安装包，可执行：
 
 ```bash
-npx @vscode/vsce package --allow-missing-repository --skip-license
+npm run package:vsix
 ```
 
 ## 配置
 
 在 VS Code 设置中配置以下 `zentao.*` 选项：
 
-| 配置项                    | 类型   | 默认值    | 说明                                                                                                         |
-| ------------------------- | ------ | --------- | ------------------------------------------------------------------------------------------------------------ |
-| `zentao.baseUrl`        | string | `""`    | 禅道服务地址，例如 `https://zentao.example.com/`。用户级配置。                                             |
-| `zentao.account`        | string | `""`    | 个人禅道账号。仅用于拉取项目列表和选择项目；项目数据、需求、任务和详情由插件内置管理员账号读取。用户级配置。 |
-| `zentao.projectId`      | number | `0`     | 当前工作区使用的禅道项目 ID。缺失或无效时，插件会引导选择或手动输入。工作区级配置。                          |
-| `zentao.requestTimeout` | number | `15000` | 请求超时时间，单位毫秒，最小值 `1000`。                                                                    |
+| 配置项                    | 类型   | 默认值    | 作用域   | 说明                                                                                                         |
+| ------------------------- | ------ | --------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `zentao.baseUrl`        | string | `""`    | 用户级   | 禅道服务地址，例如 `https://zentao.example.com/`。                                                           |
+| `zentao.account`        | string | `""`    | 用户级   | 个人禅道账号。仅用于拉取项目列表和选择项目；项目数据、需求、任务和详情由插件内置管理员账号读取。             |
+| `zentao.projectId`      | number | `0`     | 工作区级 | 当前工作区使用的禅道项目 ID。缺失或无效时，插件会引导选择或手动输入。                                        |
+| `zentao.requestTimeout` | number | `15000` | —        | 请求超时时间，单位毫秒，最小值 `1000`。                                                                      |
 
 插件会把个人账号密码、个人 token 和管理员 token 存储在 VS Code Secret Storage 中，不会写入普通配置文件。个人账号本身写入 `zentao.account` 用户级配置；管理员账号/密码写死在插件源码中，不会进入日志或普通配置。
 
@@ -78,7 +62,7 @@ npx @vscode/vsce package --allow-missing-repository --skip-license
 1. 打开一个工作区。
 2. 在 VS Code 设置中填写 `zentao.baseUrl`。
 3. 打开活动栏中的 ZenTao 视图。
-4. 点击视图标题栏中的“重新连接”，输入禅道账号和密码。
+4. 点击视图标题栏中的"重新连接"，输入禅道账号和密码。
 5. 如果当前工作区还没有有效的 `zentao.projectId`，插件会尝试拉取可访问项目列表并显示选择器。
 6. 选择项目后，插件会把项目 ID 写入当前工作区配置并刷新数据。
 
@@ -125,13 +109,28 @@ npx @vscode/vsce package --allow-missing-repository --skip-license
 
 打开预览时大图自动缩小适应窗口，小图保持原尺寸。
 
-详情页顶部的”导出 MD”按钮会把当前页面展示的标题、基础字段、正文、附件和历史记录导出为 Markdown 文件。导出文件保存到当前工作区根目录的 `requirements/` 文件夹内，不包含”完整原始响应”。
+详情页顶部的"导出 MD"按钮会把当前页面展示的标题、基础字段、正文、附件和历史记录导出为 Markdown 文件。导出文件保存到当前工作区根目录的 `requirements/` 文件夹内，不包含"完整原始响应"。
 
-附件预览面板顶部同样提供导出按钮：对于 Excel、Word、PDF、CSV、TXT、Markdown 等文本类附件，点击后将预览内容导出为 Markdown 文件；对于图片类附件，按钮显示为”保存文件”，点击后直接将原图保存到 `requirements/` 文件夹。
+附件预览面板顶部同样提供导出按钮：对于 Excel、Word、PDF、CSV、TXT、Markdown 等文本类附件，点击后将预览内容导出为 Markdown 文件；对于图片类附件，按钮显示为"保存文件"，点击后直接将原图保存到 `requirements/` 文件夹。
+
+## 双客户端认证架构
+
+插件使用两个独立的禅道 API 客户端，分别使用不同凭据：
+
+- **个人客户端** — 使用用户自己的账号（`zentao.account` + Secret Storage 中的密码）认证。仅用于拉取项目列表和选择项目，展示用户个人可见的项目。
+- **管理员客户端** — 使用插件内置管理员凭据认证。用于所有数据访问：加载项目数据、需求、任务、详情和附件。管理员账号具有跨禅道实例的广泛读取权限。
+
+两个客户端共享同一个 `ZenTaoClient` 类，仅在登录时使用不同凭据。管理员凭据嵌入源码中用于插件分发，不会输出到日志或配置。
+
+### Token 管理
+
+- 个人 token 和管理员 token 使用独立的 Secret Storage 键（`zentao.token` vs `zentao.adminToken.{base64url(baseUrl)}`），互不覆盖。
+- 收到 401 时，客户端使用已存凭据自动重试最多 3 次；3 次都失败或错误不是 401，才重新询问用户名和密码（不重新询问 URL）。
+- 管理员 token 刷新是静默的，使用内置管理员凭据，无需用户交互。
 
 ## 请求日志与排错
 
-如果连接失败、数据加载失败或 API 响应异常，可以打开“请求日志”查看诊断信息。日志会尽量隐藏敏感信息，例如 token、账号密码和其他凭据。
+如果连接失败、数据加载失败或 API 响应异常，可以打开"请求日志"查看诊断信息。日志会尽量隐藏敏感信息，例如 token、账号密码和其他凭据。
 
 常见问题：
 
@@ -158,12 +157,12 @@ npx @vscode/vsce package --allow-missing-repository --skip-license
 ## 开发
 
 ```bash
-npm install
-npm run compile
-npm test
-npm run verify
-npm run package:vsix
-npm run release:check
+npm install          # 安装依赖
+npm run compile      # 类型检查 + esbuild 打包
+npm test             # 运行全部 Vitest 测试
+npm run verify       # 编译并运行完整测试套件
+npm run package:vsix # 编译并生成 VSIX 安装包
+npm run release:check # 编译、测试并生成 VSIX 安装包（完整发布前检查）
 ```
 
 常用脚本：
@@ -173,12 +172,28 @@ npm run release:check
 | `npm run check`         | 运行 TypeScript 类型检查，不输出构建文件。                    |
 | `npm run bundle`        | 使用 esbuild 生成 VS Code 扩展运行入口 `out/extension.js`。 |
 | `npm run compile`       | 运行类型检查并生成 bundle。                                   |
-| `npm run watch`         | 以 watch 模式运行 TypeScript。                                |
+| `npm run watch`         | 以 watch 模式运行 TypeScript（仅类型检查，不重新打包）。     |
 | `npm test`              | 运行全部 Vitest 测试。                                        |
+| `npx vitest run src/zentaoClient.test.ts` | 运行单个测试文件。                              |
+| `npx vitest run -t "test name"` | 运行匹配名称的测试。                                   |
 | `npm run verify`        | 编译并运行完整测试套件。                                      |
 | `npm run package:vsix`  | 编译并生成 VSIX 安装包。                                      |
 | `npm run release:check` | 编译、测试并生成 VSIX 安装包。                                |
 
-## 版本
+## 版本历史
 
-当前版本：`1.0.0`
+### v1.0.0
+
+- 个人账号仅用于拉取项目列表和选择项目；项目数据、需求列表、任务列表和详情改由插件内置管理员账号读取。
+- 新增 `zentao.account` 用户级配置；账号不再写入 Secret Storage，密码和 token 仍存放在 Secret Storage。
+- 管理员 token 使用独立的 Secret Storage 键，不会覆盖个人账号 token；管理员 token 失效时由内置管理员凭据静默刷新。
+- token 失效时，先用当前账号和已存密码自动重新登录最多 3 次；3 次都失败，或失败状态不是 401，再重新询问用户名和密码（仍不重新询问 URL）。
+- 已配置 URL、账号、项目 ID 时，普通刷新不再重复弹出 URL 输入框或完整首登流程；缺密码时只提示密码。
+- 请求日志时间固定使用东八区显示，例如 `2026-06-22T21:35:09+08:00`，不随宿主机器时区变化。
+
+### v0.9.0
+
+- 需求列表会合并项目需求和产品需求；当同 ID 的项目需求字段为空时，会用产品需求中的非空字段补齐标题、优先级、状态和指派人等展示信息。
+- 当项目需求或产品需求列表为空、部分失败时，插件会从执行任务里的 `story` / `storyID` / `storyId` 提取需求 ID，并按 `/stories/{id}` 补全需求列表。
+- 项目执行任务、产品需求和按 ID 补需求的请求会限制并发，避免项目执行或关联产品较多时一次性打满禅道接口。
+- 需求详情页仍按需求 ID 单独请求 `/stories/{id}` 获取完整详情；列表数据只在详情接口失败时作为本地缓存兜底。

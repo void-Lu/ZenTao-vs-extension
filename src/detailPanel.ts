@@ -211,6 +211,16 @@ export class DetailPanel {
     return this.panels.size > 0;
   }
 
+  // 返回当前所有已打开的详情页目标，供刷新列表后逐个重新拉取详情。
+  getOpenTargets(): { type: ZenTaoItemType; id: number }[] {
+    return Array.from(this.panels.keys()).map((key) => {
+      const separatorIndex = key.indexOf(':');
+      const type = key.slice(0, separatorIndex) as ZenTaoItemType;
+      const id = Number(key.slice(separatorIndex + 1));
+      return { type, id };
+    });
+  }
+
   close(): void {
     for (const state of Array.from(this.panels.values())) {
       state.panel.dispose();

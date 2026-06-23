@@ -118,6 +118,71 @@ describe('extension scaffold', () => {
     expect(extensionSource).toContain('currentDetailTarget');
   });
 
+  test('refresh reloads every opened detail panel via getOpenTargets', async () => {
+    vi.resetModules();
+    zentaoClientMock.getStory = undefined;
+    const values = { baseUrl: 'https://zentao.example.com/', projectId: 1, requestTimeout: 5000, account: 'admin' };
+    const commands = new Map<string, (...args: unknown[]) => unknown>();
+    const shownDetails: Array<{ type: string; id: number }> = [];
+    const openTargets = [
+      { type: 'story', id: 11 },
+      { type: 'task', id: 22 }
+    ];
+    vi.doMock('../detailPanel', () => ({
+      DetailPanel: class {
+        isOpen() { return true; }
+        getOpenTargets() { return openTargets; }
+        show(detail: { type: string; id: number }) { shownDetails.push({ type: detail.type, id: detail.id }); }
+        close() {}
+      }
+    }));
+    vi.doMock('vscode', () => ({
+      window: {
+        createOutputChannel: () => ({ appendLine() {}, show() {} }),
+        createTreeView: () => ({ dispose() {} }),
+        showWarningMessage: vi.fn(),
+        showInformationMessage: vi.fn(),
+        showInputBox: vi.fn(),
+        showQuickPick: vi.fn()
+      },
+      workspace: {
+        workspaceFolders: [{}],
+        getConfiguration: () => ({
+          get: <T,>(key: string): T | undefined => values[key as keyof typeof values] as T | undefined,
+          inspect: <T,>(key: string): { globalValue?: T } | undefined => key === 'baseUrl' ? { globalValue: values.baseUrl as T } : undefined,
+          update: async () => undefined
+        })
+      },
+      commands: {
+        registerCommand: (name: string, callback: (...args: unknown[]) => unknown) => {
+          commands.set(name, callback);
+          return { dispose() {} };
+        }
+      },
+      EventEmitter: class {
+        event = vi.fn();
+        fire = vi.fn();
+        dispose = vi.fn();
+      },
+      TreeItem: class {
+        constructor(public readonly label: string, public readonly collapsibleState?: unknown) {}
+      },
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      env: { clipboard: { writeText: vi.fn() } },
+      ConfigurationTarget: { Global: true, Workspace: false }
+    }));
+    const extension = await import('../extension');
+
+    extension.activate({ secrets: { get: async (key: string) => key.startsWith('zentao.token') ? 'token-1' : undefined, store: async () => undefined, delete: async () => undefined }, subscriptions: [], extensionUri: {} } as any);
+    // 先打开一个详情，让 extension 创建 DetailPanel 实例。
+    await commands.get('zentao.openDetail')?.('story', 11);
+    shownDetails.length = 0;
+    await commands.get('zentao.refresh')?.();
+
+    expect(shownDetails).toContainEqual({ type: 'story', id: 11 });
+    expect(shownDetails).toContainEqual({ type: 'task', id: 22 });
+  });
+
   test('tree sort and filter commands change local provider state without reloading project data', async () => {
     vi.resetModules();
     const values = { baseUrl: 'https://zentao.example.com/', projectId: 1, requestTimeout: 5000 };
@@ -471,6 +536,7 @@ describe('extension scaffold', () => {
           capturedOpenDetail = openDetail;
         }
         isOpen() { return true; }
+        getOpenTargets() { return [] as { type: 'story' | 'task'; id: number }[]; }
         show() {}
         close() { closedDetails.push('closed'); }
       }
@@ -552,6 +618,7 @@ describe('extension scaffold', () => {
       DetailPanel: class {
         constructor(_extensionUri: unknown, _attachmentService: unknown, _openDetail: (type: 'story' | 'task', id: number) => Promise<void>) {}
         isOpen() { return true; }
+        getOpenTargets() { return [] as { type: 'story' | 'task'; id: number }[]; }
         show() {}
         close() { closedDetails.push('closed'); }
       }

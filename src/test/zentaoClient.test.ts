@@ -36,7 +36,39 @@ describe('ZenTaoClient', () => {
     expect(body).toEqual({ account: 'admin', password: 'secret' });
   });
 
-  it('fetches paged data again with total as limit', async () => {
+  it('paginates by fixed page size of 50 until total is covered', async () => {
+    const urls: string[] = [];
+    const allStories = Array.from({ length: 120 }, (_, index) => ({ id: index + 1 }));
+    const client = new (ZenTaoClient as any)({
+      baseUrl: 'https://zentao.example.com/',
+      timeoutMs: 5000,
+      getToken: async () => 'abc',
+      setToken: async () => undefined,
+      logger: new RequestLogger({ appendLine() {}, show() {} } as any),
+      fetch: async (input: RequestInfo) => {
+        urls.push(String(input));
+        const url = new URL(String(input));
+        const page = Number(url.searchParams.get('page') ?? 1);
+        const start = (page - 1) * 50;
+        return jsonResponse({
+          page,
+          total: 120,
+          limit: 50,
+          stories: allStories.slice(start, start + 50)
+        });
+      }
+    });
+
+    const data = await client.getAll('projects/123/stories');
+    expect(data.stories.map((item: any) => item.id)).toEqual(allStories.map((item) => item.id));
+    expect(urls).toEqual([
+      'https://zentao.example.com/api.php/v1/projects/123/stories?limit=50&page=1',
+      'https://zentao.example.com/api.php/v1/projects/123/stories?limit=50&page=2',
+      'https://zentao.example.com/api.php/v1/projects/123/stories?limit=50&page=3'
+    ]);
+  });
+
+  it('does not paginate when total fits within a single page', async () => {
     const urls: string[] = [];
     const client = new (ZenTaoClient as any)({
       baseUrl: 'https://zentao.example.com/',
@@ -46,16 +78,31 @@ describe('ZenTaoClient', () => {
       logger: new RequestLogger({ appendLine() {}, show() {} } as any),
       fetch: async (input: RequestInfo) => {
         urls.push(String(input));
-        if (urls.length === 1) {
-          return jsonResponse({ page: 1, total: 2, limit: 1, stories: [{ id: 1 }, { id: 2 }] });
-        }
-        return jsonResponse({ page: 1, total: 2, limit: 2, stories: [{ id: 1 }, { id: 2 }] });
+        return jsonResponse({ page: 1, total: 2, limit: 50, stories: [{ id: 1 }, { id: 2 }] });
       }
     });
 
     const data = await client.getAll('projects/123/stories');
     expect(data.stories.map((item: any) => item.id)).toEqual([1, 2]);
-    expect(urls[1]).toBe('https://zentao.example.com/api.php/v1/projects/123/stories?limit=2');
+    expect(urls).toEqual(['https://zentao.example.com/api.php/v1/projects/123/stories?limit=50&page=1']);
+  });
+
+  it('appends pagination params to paths that already carry query params', async () => {
+    const urls: string[] = [];
+    const client = new (ZenTaoClient as any)({
+      baseUrl: 'https://zentao.example.com/',
+      timeoutMs: 5000,
+      getToken: async () => 'abc',
+      setToken: async () => undefined,
+      logger: new RequestLogger({ appendLine() {}, show() {} } as any),
+      fetch: async (input: RequestInfo) => {
+        urls.push(String(input));
+        return jsonResponse({ page: 1, total: 1, limit: 50, stories: [{ id: 1 }] });
+      }
+    });
+
+    await client.getAll('stories?product=169');
+    expect(urls).toEqual(['https://zentao.example.com/api.php/v1/stories?product=169&limit=50&page=1']);
   });
 
   it('fetches product stories with the v1 product stories endpoint', async () => {
@@ -75,7 +122,7 @@ describe('ZenTaoClient', () => {
     const data = await client.getProductStories(169);
 
     expect(data).toEqual({ stories: [{ id: 101 }] });
-    expect(urls[0]).toBe('https://zentao.example.com/api.php/v1/products/169/stories');
+    expect(urls[0]).toBe('https://zentao.example.com/api.php/v1/products/169/stories?limit=50&page=1');
   });
 
   it('fetches execution stories with the v1 execution stories endpoint', async () => {
@@ -95,7 +142,7 @@ describe('ZenTaoClient', () => {
     const data = await client.getExecutionStories(201);
 
     expect(data).toEqual({ stories: [{ id: 101 }] });
-    expect(urls[0]).toBe('https://zentao.example.com/api.php/v1/executions/201/stories');
+    expect(urls[0]).toBe('https://zentao.example.com/api.php/v1/executions/201/stories?limit=50&page=1');
   });
 
   it('falls back to the legacy product query endpoint when product stories endpoint fails', async () => {
@@ -118,8 +165,8 @@ describe('ZenTaoClient', () => {
 
     expect(data).toEqual({ stories: [{ id: 101 }] });
     expect(urls).toEqual([
-      'https://zentao.example.com/api.php/v1/products/169/stories',
-      'https://zentao.example.com/api.php/v1/stories?product=169'
+      'https://zentao.example.com/api.php/v1/products/169/stories?limit=50&page=1',
+      'https://zentao.example.com/api.php/v1/stories?product=169&limit=50&page=1'
     ]);
   });
 
@@ -135,20 +182,14 @@ describe('ZenTaoClient', () => {
       fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
         urls.push(String(input));
         sentHeaders = new Headers(init?.headers);
-        if (urls.length === 1) {
-          return jsonResponse({ page: 1, total: 2, limit: 1, projects: [{ id: 1, name: 'Alpha' }] });
-        }
-        return jsonResponse({ page: 1, total: 2, limit: 2, projects: [{ id: 1, name: 'Alpha' }, { id: 2, name: 'Beta' }] });
+        return jsonResponse({ page: 1, total: 1, limit: 50, projects: [{ id: 1, name: 'Alpha' }] });
       }
     });
 
     const data = await client.getProjects();
 
-    expect(data).toEqual({ page: 1, total: 2, limit: 2, projects: [{ id: 1, name: 'Alpha' }, { id: 2, name: 'Beta' }] });
-    expect(urls).toEqual([
-      'https://zentao.example.com/api.php/v1/projects',
-      'https://zentao.example.com/api.php/v1/projects?limit=2'
-    ]);
+    expect(data).toEqual({ page: 1, total: 1, limit: 50, projects: [{ id: 1, name: 'Alpha' }] });
+    expect(urls).toEqual(['https://zentao.example.com/api.php/v1/projects?limit=50&page=1']);
     expect(sentHeaders?.get('Token')).toBe('abc');
   });
 

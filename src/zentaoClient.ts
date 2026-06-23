@@ -93,18 +93,37 @@ export class ZenTaoClient {
     return this.request<T>(path, { method: 'GET' });
   }
 
-  async getAll<T extends { page?: number; total?: number; limit?: number }>(path: string): Promise<T> {
-    const first = await this.get<T>(path);
+  // 固定每页 50 条，按 page=1,2,... 顺序请求，直到已获取数量覆盖 total。
+  // 合并响应中的数组字段（stories/tasks/projects/executions 等），避免单次大列表请求超时。
+  private static readonly PAGE_SIZE = 50;
+
+  async getAll<T>(path: string): Promise<T> {
+    const separator = path.includes('?') ? '&' : '?';
+    const firstPath = `${path}${separator}limit=${ZenTaoClient.PAGE_SIZE}&page=1`;
+    const first = await this.get<T>(firstPath);
     if (!first || typeof first !== 'object') return first;
 
-    const page = (first as any).page;
-    const total = (first as any).total;
-    const limit = (first as any).limit;
+    const record = first as Record<string, unknown>;
+    const total = typeof record.total === 'number' ? record.total : undefined;
+    if (total == null || total <= ZenTaoClient.PAGE_SIZE) return first;
 
-    if (page == null || total == null || limit == null || limit >= total) return first;
+    // 找到承载列表数据的数组字段；找不到则无法聚合，直接返回首页。
+    const arrayKey = Object.keys(record).find((key) => Array.isArray(record[key]));
+    if (!arrayKey) return first;
 
-    const separator = path.includes('?') ? '&' : '?';
-    return this.get<T>(`${path}${separator}limit=${total}`);
+    const merged: Record<string, unknown> = { ...record };
+    const allItems: unknown[] = [...(record[arrayKey] as unknown[])];
+    const pageCount = Math.ceil(total / ZenTaoClient.PAGE_SIZE);
+    for (let page = 2; page <= pageCount; page++) {
+      const resp = await this.get<Record<string, unknown>>(`${path}${separator}limit=${ZenTaoClient.PAGE_SIZE}&page=${page}`);
+      const items = resp?.[arrayKey];
+      if (Array.isArray(items)) {
+        allItems.push(...items);
+      }
+    }
+    merged[arrayKey] = allItems;
+    merged.limit = allItems.length;
+    return merged as T;
   }
 
   async downloadByPath(path: string): Promise<Uint8Array> {

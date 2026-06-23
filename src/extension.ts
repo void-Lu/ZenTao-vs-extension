@@ -326,16 +326,28 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   async function refreshCurrentDetail(): Promise<void> {
-    if (!currentDetailTarget || !detailPanel?.isOpen()) {
+    if (!detailPanel?.isOpen()) {
       return;
     }
-    const raw = currentDetailTarget.type === 'story'
-      ? await getAdminClient().getStory(currentDetailTarget.id)
-      : await getAdminClient().getTask(currentDetailTarget.id);
-    const detail = toDetailViewModel(currentDetailTarget.type, raw);
+    const targets = detailPanel.getOpenTargets();
+    if (targets.length === 0) {
+      return;
+    }
     const baseUrl = clientConfig?.baseUrl ?? readConnectionConfig(getWorkspaceConfig()).baseUrl;
-    rewriteDetailImageUrls(detail, baseUrl, await credentials.getAdminToken(baseUrl));
-    detailPanel.show(detail);
+    const token = await credentials.getAdminToken(baseUrl);
+    const admin = getAdminClient();
+    for (const target of targets) {
+      try {
+        const raw = target.type === 'story'
+          ? await admin.getStory(target.id)
+          : await admin.getTask(target.id);
+        const detail = toDetailViewModel(target.type, raw);
+        rewriteDetailImageUrls(detail, baseUrl, token);
+        detailPanel.show(detail);
+      } catch {
+        // 单个详情刷新失败不影响其他详情；错误已记录到请求日志。
+      }
+    }
   }
 
   async function refresh(): Promise<void> {

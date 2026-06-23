@@ -107,27 +107,6 @@ function addProductId(value: unknown, ids: Set<number>): void {
   addNumericId(value, ids);
 }
 
-function addStoryId(value: unknown, ids: Set<number>): void {
-  if (value === null || value === undefined || value === '') {
-    return;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      addStoryId(item, ids);
-    }
-    return;
-  }
-  if (typeof value === 'object') {
-    const record = asRecord(value);
-    const directId = record.id ?? record.story ?? record.storyID ?? record.storyId;
-    if (directId !== undefined) {
-      addStoryId(directId, ids);
-    }
-    return;
-  }
-  addNumericId(value, ids);
-}
-
 function hasValue(value: unknown): boolean {
   if (value === null || value === undefined) {
     return false;
@@ -161,16 +140,6 @@ function collectProductIds(records: AnyRecord[]): number[] {
     addProductId(record.product, ids);
     addProductId(record.productID, ids);
     addProductId(record.productId, ids);
-  }
-  return [...ids];
-}
-
-function collectStoryIds(records: AnyRecord[]): number[] {
-  const ids = new Set<number>();
-  for (const record of records) {
-    addStoryId(record.story, ids);
-    addStoryId(record.storyID, ids);
-    addStoryId(record.storyId, ids);
   }
   return [...ids];
 }
@@ -265,24 +234,19 @@ export async function loadProjectData(client: ZenTaoClient, projectId: number): 
   const [projectStoriesResult, ...remainingStoryResults] = storySourceResults;
   const productStoryResults = remainingStoryResults.slice(0, productIds.length);
   const executionStoryResults = remainingStoryResults.slice(productIds.length);
-  const sourceStoryFailure = projectStoriesResult.status === 'rejected'
-    || productStoryResults.some((result) => result.status === 'rejected')
-    || executionStoryResults.some((result) => result.status === 'rejected');
   const storyRawItems = [
     ...(projectStoriesResult.status === 'fulfilled' ? asArray(projectStoriesResult.value, 'stories') : []),
     ...productStoryResults.flatMap((result) => result.status === 'fulfilled' ? asArray(result.value, 'stories') : []),
     ...executionStoryResults.flatMap((result) => result.status === 'fulfilled' ? asArray(result.value, 'stories') : [])
   ];
-  const listedStoryIds = new Set(storyRawItems.map((item) => Number(asRecord(item).id)).filter((id) => Number.isInteger(id) && id > 0));
-  const taskStoryIds = collectStoryIds(taskRawRecords);
-  const missingTaskStoryIds = sourceStoryFailure || storyRawItems.length === 0
-    ? taskStoryIds.filter((storyId) => !listedStoryIds.has(storyId))
-    : [];
-  const taskStoryResults = await settleWithConcurrency(missingTaskStoryIds, (storyId) => client.getStory(storyId));
-  const taskStoryRawItems = taskStoryResults.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
-  const partialStoryFailure = sourceStoryFailure || taskStoryResults.some((result) => result.status === 'rejected');
-  const stories = mapStories([...storyRawItems, ...taskStoryRawItems]);
-  const message = partialStoryFailure ? '需求列表部分加载失败，可打开请求日志查看被拒绝或失败的接口。' : undefined;
+  const stories = mapStories(storyRawItems);
+  // 仅当所有需求列表来源都失败（rejected）时才标记需求失败；
+  // 中间来源失败但其他来源成功获取到可用需求数据时，不标记需求失败。
+  const allStorySourcesFailed = projectStoriesResult.status === 'rejected'
+    && productStoryResults.every((result) => result.status === 'rejected')
+    && executionStoryResults.every((result) => result.status === 'rejected');
+  const partialStoryFailure = allStorySourcesFailed;
+  const message = partialStoryFailure ? '需求列表加载失败，可打开请求日志查看被拒绝或失败的接口。' : undefined;
 
   return { project, stories, tasks, partialStoryFailure, partialTaskFailure, message };
 }

@@ -125,7 +125,7 @@ describe('loadProjectData', () => {
     expect(state.partialTaskFailure).toBe(true);
   });
 
-  it('marks partial story failure when any story source fails', async () => {
+  it('does not mark story failure when some story sources succeed', async () => {
     const client = {
       getProject: async () => ({ id: 123, name: '企业管理系统', products: [169] }),
       getProjectStories: async () => { throw new Error('project stories forbidden'); },
@@ -137,32 +137,48 @@ describe('loadProjectData', () => {
     const state = await loadProjectData(client, 123);
 
     expect(state.stories.map((story) => story.id)).toEqual([101]);
-    expect(state.partialStoryFailure).toBe(true);
-    expect(state.message).toContain('需求列表部分加载失败');
+    expect(state.partialStoryFailure).toBe(false);
+    expect(state.message).toBeUndefined();
   });
 
-  it('fills missing stories from task story IDs when story list sources fail', async () => {
-    const storyRequests: number[] = [];
+  it('marks story failure only when all story sources fail', async () => {
+    const client = {
+      getProject: async () => ({ id: 123, name: '企业管理系统', products: [169] }),
+      getProjectStories: async () => { throw new Error('project stories forbidden'); },
+      getProductStories: async () => { throw new Error('product stories forbidden'); },
+      getProjectExecutions: async () => ({ executions: [{ id: 201, name: '一期' }] }),
+      getExecutionTasks: async () => ({ tasks: [] }),
+      getExecutionStories: async () => { throw new Error('execution stories forbidden'); }
+    } as unknown as ZenTaoClient;
+
+    const state = await loadProjectData(client, 123);
+
+    expect(state.stories).toEqual([]);
+    expect(state.partialStoryFailure).toBe(true);
+    expect(state.message).toContain('需求列表加载失败');
+  });
+
+  it('does not fetch missing stories individually when story list sources fail', async () => {
     const client = {
       getProject: async () => ({ id: 123, name: '企业管理系统' }),
       getProjectStories: async () => { throw new Error('project stories forbidden'); },
       getProductStories: async () => ({ stories: [] }),
       getProjectExecutions: async () => ({ executions: [{ id: 201 }] }),
       getExecutionTasks: async () => ({ tasks: [{ id: 301, name: '前端页面', pri: 2, status: 'doing', story: 4712 }] }),
-      getStory: async (storyId: number) => {
-        storyRequests.push(storyId);
-        return { id: storyId, title: '任务关联需求', pri: 1, status: 'active', assignedToRealName: 'Amy Sun' };
+      getExecutionStories: async () => ({ stories: [] }),
+      getStory: async () => {
+        throw new Error('per-story fallback should not be used');
       }
     } as unknown as ZenTaoClient;
 
     const state = await loadProjectData(client, 123);
 
-    expect(storyRequests).toEqual([4712]);
-    expect(state.stories).toMatchObject([{ id: 4712, title: '任务关联需求', priority: 'P1', status: 'active', assignedTo: 'Amy Sun' }]);
-    expect(state.partialStoryFailure).toBe(true);
+    expect(state.stories).toEqual([]);
+    // 执行需求来源成功（虽然返回空），所以不标记需求失败。
+    expect(state.partialStoryFailure).toBe(false);
   });
 
-  it('loads execution stories when project and product story sources fail', async () => {
+  it('loads execution stories without marking failure when project and product story sources fail', async () => {
     const executionStoryRequests: number[] = [];
     const client = {
       getProject: async () => ({ id: 123, name: '企业管理系统', products: [169] }),
@@ -180,7 +196,37 @@ describe('loadProjectData', () => {
 
     expect(executionStoryRequests).toEqual([201]);
     expect(state.stories).toMatchObject([{ id: 4712, title: '执行关联需求', priority: 'P1', status: 'active' }]);
-    expect(state.partialStoryFailure).toBe(true);
+    expect(state.partialStoryFailure).toBe(false);
+  });
+
+  it('does not mark task failure when there are no executions', async () => {
+    const client = {
+      getProject: async () => ({ id: 123, name: '企业管理系统' }),
+      getProjectStories: async () => ({ stories: [] }),
+      getProductStories: async () => ({ stories: [] }),
+      getProjectExecutions: async () => ({ executions: [] }),
+      getExecutionTasks: async () => ({ tasks: [] })
+    } as unknown as ZenTaoClient;
+
+    const state = await loadProjectData(client, 123);
+
+    expect(state.tasks).toEqual([]);
+    expect(state.partialTaskFailure).toBe(false);
+  });
+
+  it('does not mark task failure when executions return empty task lists', async () => {
+    const client = {
+      getProject: async () => ({ id: 123, name: '企业管理系统' }),
+      getProjectStories: async () => ({ stories: [] }),
+      getProductStories: async () => ({ stories: [] }),
+      getProjectExecutions: async () => ({ executions: [{ id: 201 }, { id: 202 }] }),
+      getExecutionTasks: async () => ({ tasks: [] })
+    } as unknown as ZenTaoClient;
+
+    const state = await loadProjectData(client, 123);
+
+    expect(state.tasks).toEqual([]);
+    expect(state.partialTaskFailure).toBe(false);
   });
 
   it('limits execution task and product story request concurrency', async () => {
