@@ -295,14 +295,21 @@ function extractAttachments(raw: AnyRecord): AttachmentViewModel[] {
   });
 }
 
+function fixJsonHrefs(html: string): string {
+  return html.replace(/href="([^"]*?)\.json"/g, 'href="$1.html"');
+}
+
 function extractActivities(raw: AnyRecord): ActivityViewModel[] {
   return asArray(raw.actions).map((item) => {
     const action = asRecord(item);
+    const descHtml = sanitizeRichHtml(action.desc);
+    const commentHtml = sanitizeRichHtml(action.comment);
+    const combined = descHtml && commentHtml ? `${descHtml}<br>${commentHtml}` : descHtml || commentHtml;
     return {
       date: '',
       actor: '',
       action: '',
-      contentHtml: sanitizeRichHtml(action.desc)
+      contentHtml: fixJsonHrefs(combined)
     };
   });
 }

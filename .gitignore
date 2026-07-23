@@ -18,3 +18,7 @@ resources/test-account-info.txt
 resources/*
 !.resources/zentao.svg
 docs/
+.github
+.codex
+.agents
+.trellis

@@ -120,7 +120,8 @@ describe('toDetailViewModel', () => {
     expect(model.contentSections[1].html).not.toContain('script');
     expect(model.activities).toHaveLength(2);
     expect(model.activities[0].contentHtml).toContain('<p>只显示描述</p>');
-    expect(model.activities[0].contentHtml).not.toContain('不要显示备注');
+    expect(model.activities[0].contentHtml).toContain('<p>不要显示备注</p>');
+    expect(model.activities[0].contentHtml).toMatch(/<p>只显示描述<\/p><br><p>不要显示备注<\/p>/);
     expect(model.activities[1].contentHtml).toContain('<p>字段变更描述</p>');
     expect(model.activities[1].contentHtml).not.toContain('script');
   });
@@ -187,6 +188,25 @@ describe('toDetailViewModel', () => {
     ]);
     expect(model.attachments.map((attachment) => attachment.size)).toEqual(['2K', '1.5M']);
     expect(model.attachments.map((attachment) => attachment.addedDate)).toEqual(['2026-05-21', '2026-05-22']);
+  });
+
+  it('parses comment-only activities and fixes .json hrefs', () => {
+    const model = toDetailViewModel('task', {
+      id: 9999,
+      name: 'href fix test',
+      actions: [
+        { desc: '', comment: '<p>纯评论内容</p>' },
+        { desc: '<p>操作描述 <a href="https://pm.netsuitecn.cn/project-view-582.json">链接</a></p>', comment: '' },
+        { desc: '<p>desc</p>', comment: '<p>comment with <a href="https://pm.netsuitecn.cn/story-view-100.json">link</a></p>' }
+      ]
+    });
+
+    expect(model.activities).toHaveLength(3);
+    expect(model.activities[0].contentHtml).toBe('<p>纯评论内容</p>');
+    expect(model.activities[1].contentHtml).toContain('href="https://pm.netsuitecn.cn/project-view-582.html"');
+    expect(model.activities[1].contentHtml).not.toContain('.json');
+    expect(model.activities[2].contentHtml).toContain('<p>desc</p><br><p>comment with');
+    expect(model.activities[2].contentHtml).toContain('story-view-100.html');
   });
 });
 
