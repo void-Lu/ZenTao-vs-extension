@@ -8,6 +8,18 @@ docs/**
 **/.omx/**
 .codegraph/**
 **/.codegraph/**
+.trellis/**
+**/.trellis/**
+.github/**
+**/.github/**
+.codex/**
+**/.codex/**
+.agents/**
+**/.agents/**
+.netsuite-mcp/**
+**/.netsuite-mcp/**
+.git/**
+**/.git/**
 docs/superpowers/**
 src/**/*.test.ts
 src/**
@@ -22,6 +34,7 @@ tsconfig.json
 vitest.config.ts
 .gitignore
 CLAUDE.md
+AGENTS.md
 *.vsix
 .vscode
 !resources/zentao.svg
