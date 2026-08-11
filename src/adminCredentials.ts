@@ -3,8 +3,8 @@
 //
 // 注意：这是源码内写死的凭据，请勿提交真实账号到公共仓库，也勿在日志或
 // 普通 VS Code 配置中输出。如需更换，修改下方常量即可。
-export const ADMIN_ACCOUNT = 'plugin-admin';
-export const ADMIN_PASSWORD = 'change-me';
+export const ADMIN_ACCOUNT = 'bob.yang';
+export const ADMIN_PASSWORD = 'Hitpoint1234';
 
 export interface AdminCredentials {
   account: string;

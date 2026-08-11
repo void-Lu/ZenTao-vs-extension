@@ -40,6 +40,7 @@ Both clients share the same `ZenTaoClient` class; they differ only in which cred
 
 - Personal and admin tokens are stored in **separate Secret Storage keys** (`zentao.token` vs `zentao.adminToken.{base64url(baseUrl)}`); they never overwrite each other.
 - On 401, the client auto-retries with saved credentials up to **3 times** (`maxUnauthorizedRetries`). If all retries fail or the error is not 401, the user is re-prompted for account/password (but **not** for the URL).
+- On 403, the client silently re-logs in once via `forceRefreshToken()` and retries the request once, so newly granted admin permissions take effect immediately; a second 403 propagates as a normal error and is logged without further retries.
 - Admin token refresh is silent — it uses the hardcoded admin credentials without user interaction.
 
 ### Main data flow
@@ -47,7 +48,7 @@ Both clients share the same `ZenTaoClient` class; they differ only in which cred
 1. `src/configuration.ts` reads and validates `zentao.baseUrl`, `zentao.projectId`, and `zentao.requestTimeout`; it stores account/password plus per-base-URL tokens through VS Code Secret Storage.
 2. `src/connectionWizard.ts` handles first-time setup and reconnect flows: prompt for URL/credentials, log in (personal client), choose a project, then persist the base URL and project ID.
 3. `src/projectSelection.ts` maps ZenTao project-list responses (from personal client) to quick-pick items and handles first-time project selection or explicit project reselection.
-4. `src/zentaoClient.ts` builds ZenTao REST API URLs, injects tokens, refreshes the stored token once on 401 when saved account/password credentials are available, logs requests, handles timeouts, supports pagination via `getAll`, and downloads attachment bytes.
+4. `src/zentaoClient.ts` builds ZenTao REST API URLs, injects tokens, refreshes the stored token on 401 (up to 3 retries) or once on 403 when saved account/password credentials are available, logs requests, handles timeouts, supports pagination via `getAll`, and downloads attachment bytes.
 5. `src/loadProjectData.ts` loads the configured project, executions, execution tasks, and product stories (via admin client), then maps raw ZenTao responses into tree state. Key behaviors:
    - **Story fallback**: when project or product story lists are empty/partially-failed, story IDs are extracted from execution task records (`story`/`storyID`/`storyId` fields) and fetched individually via `/stories/{id}` to fill gaps.
    - **Concurrency limiting**: all batched API calls use `settleWithConcurrency` (cap: 5 concurrent requests) to avoid overwhelming the ZenTao server.

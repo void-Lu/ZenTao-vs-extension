@@ -9,7 +9,7 @@ export interface ZenTaoClientOptions {
   logger: RequestLogger;
   fetch?: typeof fetch;
   // 401 时使用 refreshToken 自动重登并重试原请求的最大次数（默认 3）。
-  // 仅对 401 生用；非 401 错误不会触发重试。
+  // 403 时使用 refreshToken 重登一次并重试一次（见 rawRequest）；仍 403 则按普通错误抛出。
   maxUnauthorizedRetries?: number;
 }
 
@@ -47,6 +47,13 @@ export class ZenTaoClient {
     if (!token) throw new ZenTaoApiError('Login did not return a token', undefined, 'tokens');
     await this.options.setToken(token);
     return token;
+  }
+
+  // 使用保存的凭据强制重登并返回新 token（登录成功会写回 Secret Storage）。
+  // 不等待 401：点击刷新时调用，让账号带上最新的服务端权限。
+  // 未配置 refreshToken 回调时返回 undefined。
+  async forceRefreshToken(): Promise<string | undefined> {
+    return this.options.refreshToken?.();
   }
 
   async getProjects(): Promise<unknown> {
@@ -218,6 +225,15 @@ export class ZenTaoClient {
           const refreshedToken = await this.options.refreshToken();
           if (refreshedToken) {
             return this.rawRequest(path, init, true, refreshedToken, remainingRetries - 1);
+          }
+        }
+        // 403：用保存的凭据重登一次并重试一次，让账号带上最新权限（仅最外层请求生效，
+        // 重试时 unauthorizedRetries 传 0，避免对同一请求重复重登）。
+        // 重试仍 403 则按普通错误抛出，由调用方正常记录日志。
+        if ((response as any).status === 403 && retryUnauthorized && !withoutToken && this.options.refreshToken && unauthorizedRetries === undefined) {
+          const refreshedToken = await this.forceRefreshToken();
+          if (refreshedToken) {
+            return this.rawRequest(path, init, true, refreshedToken, 0);
           }
         }
         throw new ZenTaoApiError(`ZenTao request failed with status ${(response as any).status}`, (response as any).status, redactSensitiveText(path));

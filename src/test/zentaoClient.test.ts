@@ -36,6 +36,35 @@ describe('ZenTaoClient', () => {
     expect(body).toEqual({ account: 'admin', password: 'secret' });
   });
 
+  it('forceRefreshToken calls the refreshToken callback and returns its token', async () => {
+    const refreshToken = vi.fn(async () => 'fresh-token');
+    const client = new ZenTaoClient({
+      baseUrl: 'https://zentao.example.com/',
+      timeoutMs: 5000,
+      getToken: async () => 'abc',
+      setToken: async () => undefined,
+      refreshToken,
+      logger: new RequestLogger({ appendLine() {}, show() {} } as any),
+      fetch: async () => jsonResponse({})
+    });
+
+    await expect(client.forceRefreshToken()).resolves.toBe('fresh-token');
+    expect(refreshToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('forceRefreshToken returns undefined when no refreshToken callback is configured', async () => {
+    const client = new ZenTaoClient({
+      baseUrl: 'https://zentao.example.com/',
+      timeoutMs: 5000,
+      getToken: async () => 'abc',
+      setToken: async () => undefined,
+      logger: new RequestLogger({ appendLine() {}, show() {} } as any),
+      fetch: async () => jsonResponse({})
+    });
+
+    await expect(client.forceRefreshToken()).resolves.toBeUndefined();
+  });
+
   it('paginates by fixed page size of 50 until total is covered', async () => {
     const urls: string[] = [];
     const allStories = Array.from({ length: 120 }, (_, index) => ({ id: index + 1 }));
@@ -292,7 +321,7 @@ describe('ZenTaoClient', () => {
     expect(refreshToken).toHaveBeenCalledTimes(3);
   });
 
-  it('does not retry on non-401 errors', async () => {
+  it('does not retry on non-401 non-403 errors', async () => {
     const refreshToken = vi.fn(async () => 'fresh-token');
     const client = new ZenTaoClient({
       baseUrl: 'https://zentao.example.com/',
@@ -301,11 +330,56 @@ describe('ZenTaoClient', () => {
       setToken: async () => undefined,
       refreshToken,
       logger: new RequestLogger({ appendLine() {}, show() {} } as any),
-      fetch: async () => jsonResponse({ error: 'forbidden' }, 403)
+      fetch: async () => jsonResponse({ error: 'server error' }, 500)
+    });
+
+    await expect(client.get('projects/123')).rejects.toMatchObject({ status: 500 });
+    expect(refreshToken).not.toHaveBeenCalled();
+  });
+
+  it('refreshes token once on 403 and rejects when the retry is still 403', async () => {
+    const sentTokens: Array<string | null> = [];
+    const refreshToken = vi.fn(async () => 'fresh-token');
+    const client = new ZenTaoClient({
+      baseUrl: 'https://zentao.example.com/',
+      timeoutMs: 5000,
+      getToken: async () => 'expired-token',
+      setToken: async () => undefined,
+      refreshToken,
+      logger: new RequestLogger({ appendLine() {}, show() {} } as any),
+      fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const headers = new Headers(init?.headers);
+        sentTokens.push(headers.get('Token'));
+        return jsonResponse({ error: 'forbidden' }, 403);
+      }
     });
 
     await expect(client.get('projects/123')).rejects.toMatchObject({ status: 403 });
-    expect(refreshToken).not.toHaveBeenCalled();
+    // 首次 403 触发一次重登；重试仍 403，不再重复重登，按普通错误抛出。
+    expect(refreshToken).toHaveBeenCalledTimes(1);
+    expect(sentTokens).toEqual(['expired-token', 'fresh-token']);
+  });
+
+  it('refreshes token on 403 and succeeds when the retry returns 200', async () => {
+    const sentTokens: Array<string | null> = [];
+    const refreshToken = vi.fn(async () => 'fresh-token');
+    const client = new ZenTaoClient({
+      baseUrl: 'https://zentao.example.com/',
+      timeoutMs: 5000,
+      getToken: async () => 'expired-token',
+      setToken: async () => undefined,
+      refreshToken,
+      logger: new RequestLogger({ appendLine() {}, show() {} } as any),
+      fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const headers = new Headers(init?.headers);
+        sentTokens.push(headers.get('Token'));
+        return sentTokens.length === 1 ? jsonResponse({ error: 'forbidden' }, 403) : jsonResponse({ id: 123 });
+      }
+    });
+
+    await expect(client.get('projects/123')).resolves.toEqual({ id: 123 });
+    expect(refreshToken).toHaveBeenCalledTimes(1);
+    expect(sentTokens).toEqual(['expired-token', 'fresh-token']);
   });
 
   it('succeeds when a later 401 retry returns 200', async () => {

@@ -22,3 +22,6 @@ docs/
 .codex
 .agents
 .trellis
+/.netsuite-mcp/logs/
+/.vscode/mcp.json
+/.mcp.json
